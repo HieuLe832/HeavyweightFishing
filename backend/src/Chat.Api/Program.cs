@@ -1,3 +1,4 @@
+using Chat.Api;
 using Chat.Api.Auth;
 using Chat.Api.Conversations;
 using Chat.Api.Email;
@@ -27,6 +28,11 @@ builder.Services.AddOptions<AuthOptions>().BindConfiguration(AuthOptions.Section
 builder.Services.AddOptions<SmtpOptions>().BindConfiguration(SmtpOptions.Section);
 builder.Services.AddOptions<MessagingOptions>().BindConfiguration(MessagingOptions.Section);
 builder.Services.AddOptions<RealtimeOptions>().BindConfiguration(RealtimeOptions.Section);
+
+// Browsers on another origin (the Next.js app) need CORS for REST and the hub. Tokens travel in headers or the query string, not
+// cookies, so credentials stay off.
+var allowedOrigins = builder.Configuration.GetSection(CorsOptions.Section).Get<CorsOptions>()?.AllowedOrigins ?? [];
+builder.Services.AddCors(o => o.AddPolicy(CorsOptions.PolicyName, p => p.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod()));
 
 // Redis (the SignalR backplane and D9) and RabbitMQ (durable events) are optional: without them the API runs one node
 // with in-memory presence and an in-process bus, which is what tests and a bare dev setup use.
@@ -128,6 +134,7 @@ if (app.Environment.IsDevelopment())
     await scope.ServiceProvider.GetRequiredService<ChatDbContext>().Database.MigrateAsync();
 }
 
+app.UseCors(CorsOptions.PolicyName);
 app.UseAuthentication();
 app.UseAuthorization();
 
