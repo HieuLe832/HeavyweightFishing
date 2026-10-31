@@ -325,11 +325,22 @@ above) and notifies each of their devices.
 - **Content:** title is the sender's display name (`Name · Group title` in a group); body is the text cut at 100 characters
   with `…`, or `Sent an attachment` when there is no text. The ids `conversationId`, `messageId` and `seq` travel with it so the
   app can open the chat. The push service sees this preview.
-- **Providers** sit behind `IPushSender`, one per platform. **Only a logging sender ships**: it logs the event (not its text) and
-  sends nothing, and the API warns about it at start. FCM, APNs and Web Push adapters need the operator's credentials and are
-  registered as `IPushSender`s.
+- **Providers** sit behind `IPushSender`, one per platform, and each is switched on by configuration. A platform with nothing set
+  keeps the logging sender (it logs the event, not its text, and sends nothing; the API says at start which platforms only log).
+  A section that is partly filled stops the API at start and names the missing keys.
+
+  | Platform | Settings | Notes |
+  |----------|----------|-------|
+  | FCM | `Push:Fcm:ServiceAccountJsonPath` | HTTP v1 API. The service account file is turned into access tokens by the API itself (no Google package) |
+  | APNs | `Push:Apns:KeyPath` (the `.p8`), `KeyId`, `TeamId`, `BundleId`, `Sandbox` | HTTP/2 with a provider token renewed every 50 minutes |
+  | Web Push | `Push:Web:PublicKey`, `PrivateKey` (VAPID, base64url), `Subject` (`mailto:` or `https://`) | RFC 8291 encryption via `Lib.Net.Http.WebPush`. The stored token is the base64url of the browser's subscription JSON `{"endpoint","keys":{"p256dh","auth"}}`; its endpoint must be `https` on a public address |
+
+  Keep keys out of source control: set them with environment variables (`Push__Apns__KeyId`) or user secrets.
+  **Delivery to real devices has not been tested**, because no credentials exist in the repo: the senders are tested against
+  fake servers (request shape, signatures, and how each provider answer maps to a result).
 - **Best effort:** a failed device is logged and skipped, with no retry (a retry would re-notify the devices that succeeded). A
-  provider answer of `InvalidToken` clears that session's token. Only an infrastructure error (database down) dead-letters the
+  provider answer that the token is dead (`InvalidToken`: FCM `UNREGISTERED`, APNs 410 or `BadDeviceToken`, Web Push 404 or 410, or a
+  Web token that does not decode) clears that session's token; every other failure keeps it. Only an infrastructure error (database down) dead-letters the
   event.
 
 ## API: media

@@ -54,12 +54,10 @@ After changing entities, add a migration:
 ## Next steps
 
 1. Chat UI with the game-inspired theme (`frontend/`).
-2. Push provider adapters: only a logging `IPushSender` ships. FCM, APNs and Web Push need operator credentials and drop in as
-   `IPushSender` registrations (see "API: push" in `docs/README.md`).
-3. Redraw `03c-dfd-level-2-moderation.drawio` so 6.1 reads D1 (`reported user`) and D4 (`block list`) for user reports; add the
+2. Redraw `03c-dfd-level-2-moderation.drawio` so 6.1 reads D1 (`reported user`) and D4 (`block list`) for user reports; add the
    matching words to the 6.1 row of the README 3c table, check that `02-dfd-level-1.drawio` shows the same reads, regenerate the
    PNGs. Left undone on purpose: it is for the final review to do (see `docs/superpowers/specs/2026-10-31-media-cleanup-design.md`).
 
-Skipped for now: Sign in with Google (1.6). Done: every backend process except 1.6 and the push providers: 1.1-1.5, 1.7, 2.0, 3.0,
+Skipped for now: Sign in with Google (1.6). Done: every backend process except 1.6 (push providers are built but untested against real devices, see "API: push"): 1.1-1.5, 1.7, 2.0, 3.0,
 4.0 (4.1-4.6, with the Redis backplane, presence, RabbitMQ hand-off, receipts and typing), 5.0 (upload, attachments, avatars, media cleanup job)
 and 6.0 (reports, bans, audit log); see the "API: …" sections in `docs/README.md`. Design specs are in `docs/superpowers/specs/`.
