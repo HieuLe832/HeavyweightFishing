@@ -10,13 +10,28 @@ using Microsoft.Extensions.Options;
 namespace Chat.Api.Messaging;
 
 /// <summary>Process 4.1: decides whether a caller may do something in a conversation, before 4.2 stores anything.</summary>
-public class CommandValidator(ChatDbContext db, ConversationReader reader, UserAccess access, IOptions<MessagingOptions> options)
+public class CommandValidator(ChatDbContext db, ConversationReader reader, UserAccess access, IOptions<MessagingOptions> options, TimeProvider time)
 {
     /// <summary>The trimmed body, or null when it is empty or longer than <paramref name="max"/>.</summary>
     public static string? NormalizeBody(string? body, int max)
     {
         var trimmed = body?.Trim();
         return string.IsNullOrEmpty(trimmed) || trimmed.Length > max ? null : trimmed;
+    }
+
+    /// <summary>
+    /// A hub connection outlives its access token, so every command re-checks that the session is still live and the
+    /// user still active. This is what makes logout and bans stop an open socket.
+    /// </summary>
+    public async Task<AuthError?> CheckCallerAsync(ClaimsPrincipal caller, CancellationToken ct)
+    {
+        var userId = caller.UserId();
+        var sessionId = caller.SessionId();
+        var now = time.GetUtcNow();
+        var live = await db.Sessions.AnyAsync(s =>
+            s.Id == sessionId && s.UserId == userId && s.RevokedAt == null && s.ExpiresAt > now
+            && db.Users.Any(u => u.Id == userId && u.Status == UserStatus.Active), ct);
+        return live ? null : AuthError.SessionEnded;
     }
 
     public async Task<AuthError?> CheckSendAsync(

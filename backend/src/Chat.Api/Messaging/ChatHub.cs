@@ -8,12 +8,15 @@ namespace Chat.Api.Messaging;
 /// <summary>Process 4.0 over WebSocket: the entry point for message commands. Failures are HubExceptions carrying the error code.</summary>
 [Authorize]
 public class ChatHub(
-    CommandValidator validator, MessageWriter writer, MessageBroadcaster broadcaster, IOptions<MessagingOptions> options) : Hub
+    CommandValidator validator, MessageWriter writer, MessageBroadcaster broadcaster,
+    MessageRateLimiter limiter, IOptions<MessagingOptions> options) : Hub
 {
     public async Task<MessageDto> SendMessage(Guid conversationId, Guid clientMsgId, string body, Guid? replyToId)
     {
         var ct = Context.ConnectionAborted;
+        Fail(await validator.CheckCallerAsync(Context.User!, ct));
         Fail(await validator.CheckSendAsync(Context.User!, conversationId, clientMsgId, body, replyToId, ct));
+        if (!limiter.TryAcquire(Context.User!.UserId())) Fail(AuthError.RateLimited);
 
         var result = await writer.SendAsync(
             Context.User!.UserId(), conversationId, clientMsgId,

@@ -40,6 +40,7 @@ builder.Services.AddScoped<ContactService>();
 builder.Services.AddScoped<ConversationReader>();
 builder.Services.AddScoped<ConversationService>();
 builder.Services.AddScoped<GroupService>();
+builder.Services.AddSingleton<MessageRateLimiter>();
 builder.Services.AddScoped<CommandValidator>();
 builder.Services.AddScoped<MessageWriter>();
 builder.Services.AddScoped<MessageBroadcaster>();
