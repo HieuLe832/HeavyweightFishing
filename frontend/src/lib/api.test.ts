@@ -32,6 +32,16 @@ function setup(handler: Handler, tokens = memoryTokens()) {
 
 const header = (init: RequestInit, name: string) => new Headers(init.headers).get(name);
 
+/** The ApiError a call rejects with; fails the test if it resolves. */
+async function failure(call: Promise<unknown>): Promise<ApiError> {
+  try {
+    await call;
+  } catch (e) {
+    return e as ApiError;
+  }
+  throw new Error("expected the call to fail");
+}
+
 describe("api.request", () => {
   it("sends the bearer token and a JSON body", async () => {
     const { api, calls } = setup(() => json(200, { ok: true }));
@@ -49,7 +59,7 @@ describe("api.request", () => {
   it("turns a problem+json response into an ApiError with status, code and fields", async () => {
     const { api } = setup(() => json(400, { title: "Bad", code: "validation_failed", errors: { email: ["Enter a valid email address."] } }));
 
-    const error = await api.request("POST", "/auth/register", {}).catch((e) => e);
+    const error = await failure(api.request("POST", "/auth/register", {}));
 
     expect(error).toBeInstanceOf(ApiError);
     expect(error.status).toBe(400);
@@ -60,7 +70,7 @@ describe("api.request", () => {
   it("turns a non-JSON error body (a proxy's HTML page) into code unknown", async () => {
     const { api } = setup(() => new Response("<html>Bad gateway</html>", { status: 502, headers: { "Content-Type": "text/html" } }));
 
-    const error = await api.request("GET", "/conversations").catch((e) => e);
+    const error = await failure(api.request("GET", "/conversations"));
 
     expect(error).toBeInstanceOf(ApiError);
     expect(error.status).toBe(502);
@@ -115,7 +125,7 @@ describe("token refresh", () => {
     const { api, calls, tokens, onSessionEnded } = setup((url) =>
       url.endsWith("/auth/refresh") ? json(401, { code: "invalid_refresh_token" }) : json(401, { code: "unauthorized" }));
 
-    const error = await api.request("GET", "/conversations").catch((e) => e);
+    const error = await failure(api.request("GET", "/conversations"));
 
     expect(error).toBeInstanceOf(ApiError);
     expect(error.status).toBe(401);
@@ -148,7 +158,7 @@ describe("token refresh", () => {
   it("never refreshes for the auth endpoints themselves", async () => {
     const { api, calls } = setup(() => json(401, { code: "invalid_credentials" }));
 
-    const error = await api.login("ann", "wrong").catch((e) => e);
+    const error = await failure(api.login("ann", "wrong"));
 
     expect(error.code).toBe("invalid_credentials");
     expect(calls).toHaveLength(1);
