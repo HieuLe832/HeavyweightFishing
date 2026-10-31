@@ -356,11 +356,17 @@ Process 5.0 and the attachment checks of 4.1. Bytes live in the object store (D7
 - **Attaching.** Upload first, then `SendMedia`: 1-10 distinct files, each `ready` and uploaded by the sender (else
   `invalid_attachment`; a wrong count, duplicates or a caption over 4000 characters are `validation_failed`). The caption is
   optional. Everything else is as for `SendMessage` (session, membership, blocks, rate limit, `clientMsgId` dedupe, events, push).
-  A deleted message shows no attachments, and its files stop being readable by other members (the bytes stay in the store).
+  A deleted message shows no attachments, and its files stop being readable by other members (the bytes stay until the cleanup job below removes them).
 - **Avatars** must be a ready image the caller uploaded (`unsupported_media_type` / `media_not_found`). Replacing one leaves the
-  old file in the store. `avatarMediaId` appears in profiles, conversation summaries, `peer` and member lists.
+  old file until the cleanup job removes it. `avatarMediaId` appears in profiles, conversation summaries, `peer` and member lists.
 - **Object store.** `ObjectStore:Endpoint` (with `AccessKey`, `SecretKey`, `Bucket`) selects the S3 store (RustFS in Compose,
   bucket created on first use); without it files are kept in memory and the API warns at start.
+- **Cleanup.** A background job (`MediaCleanupService`) removes files nothing uses: older than `Media:Cleanup:GraceDays` (7), not an
+  avatar of a user or a group, not on a live message, and not on a message that has a report (the report's evidence lists it). It
+  deletes the rows in one transaction (`FOR UPDATE SKIP LOCKED`, so several nodes can run it) and the bytes afterwards; a byte
+  delete that fails is logged and not retried. Pending and rejected uploads go the same way. Settings under `Media:Cleanup`:
+  `Enabled` (true), `IntervalMinutes` (60), `GraceDays` (7), `BatchSize` (200). Known limit: a `SendMedia` that checks a file
+  just before the job claims it can fail with a server error; uploading again fixes it.
 
 ## API: moderation
 
