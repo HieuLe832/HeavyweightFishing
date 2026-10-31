@@ -40,7 +40,16 @@ public static class PushRegistration
     {
         if (!options.IsEmpty && options.Missing() is { Count: > 0 } missing)
             throw new InvalidOperationException($"Push:Apns is partly configured; missing {string.Join(", ", missing)}.");
-        AddLogging(services, PushPlatform.Apns);
+        if (options.IsEmpty)
+        {
+            AddLogging(services, PushPlatform.Apns);
+            return;
+        }
+        if (!File.Exists(options.KeyPath))
+            throw new InvalidOperationException($"Push:Apns:KeyPath points at a file that does not exist: {options.KeyPath}");
+        services.AddHttpClient("apns");
+        services.AddSingleton<IPushSender>(sp => new ApnsPushSender(
+            sp.GetRequiredService<IHttpClientFactory>().CreateClient("apns"), options, sp.GetRequiredService<TimeProvider>()));
     }
 
     private static void AddWeb(IServiceCollection services, WebOptions options)
