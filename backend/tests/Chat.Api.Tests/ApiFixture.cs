@@ -3,7 +3,9 @@ using Chat.Data;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -46,6 +48,19 @@ public sealed class ApiFixture : IAsyncLifetime
     public IServiceProvider Services => _factory.Services;
 
     public HttpClient NewClient() => _factory.CreateClient();
+
+    /// <summary>A not-yet-started connection to the chat hub, over the in-memory test server.</summary>
+    public HubConnection NewHub(string accessToken) => new HubConnectionBuilder()
+        .WithUrl("http://localhost/hubs/chat", o =>
+        {
+            o.AccessTokenProvider = () => Task.FromResult<string?>(accessToken);
+            o.HttpMessageHandlerFactory = _ => _factory.Server.CreateHandler();
+            o.Transports = HttpTransportType.WebSockets;
+            // Like a browser, send the token in the query string: the test WebSocket client sets no headers.
+            o.WebSocketFactory = async (context, ct) => await _factory.Server.CreateWebSocketClient()
+                .ConnectAsync(new UriBuilder(context.Uri) { Query = $"{context.Uri.Query.TrimStart('?')}&access_token={Uri.EscapeDataString(accessToken)}" }.Uri, ct);
+        })
+        .Build();
 
     public async Task WithDbAsync(Func<ChatDbContext, Task> action)
     {

@@ -20,6 +20,11 @@ public record AuthError(int Status, string Code, string Title)
     public static readonly AuthError InsufficientRole = new(403, "insufficient_role", "Your role in this group does not allow that.");
     public static readonly AuthError GroupFull = new(409, "group_full", "This group has reached its member limit.");
     public static readonly AuthError Conflict = new(409, "conflict", "Something changed at the same time. Try again.");
+    public static readonly AuthError MessageNotFound = new(404, "message_not_found", "No such message.");
+    public static readonly AuthError MessageDeleted = new(409, "message_deleted", "That message was deleted.");
+    public static readonly AuthError RateLimited = new(429, "rate_limited", "You are sending too fast. Slow down.");
+    public static readonly AuthError UnsupportedType = new(400, "unsupported_type", "That kind of message is not supported yet.");
+    public static readonly AuthError Invalid = new(400, "validation_failed", "That message is not valid.");
     public static readonly AuthError SelfTarget = new(400, "invalid_target", "You cannot do that to yourself.");
 }
 

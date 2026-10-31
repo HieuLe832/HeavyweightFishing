@@ -38,7 +38,16 @@ public class JwtBearerSetup(IOptions<AuthOptions> authOptions, TimeProvider time
                        && (notBefore is null || now >= notBefore.Value - ClockSkew);
             },
         };
-        options.Events = new JwtBearerEvents { OnTokenValidated = CheckSessionAsync };
+        options.Events = new JwtBearerEvents { OnMessageReceived = TokenFromQuery, OnTokenValidated = CheckSessionAsync };
+    }
+
+    /// <summary>Browsers cannot set headers on a WebSocket, so the hub takes the token from the query string.</summary>
+    private static Task TokenFromQuery(MessageReceivedContext context)
+    {
+        if (context.HttpContext.Request.Path.StartsWithSegments("/hubs/chat")
+            && context.Request.Query["access_token"] is { Count: > 0 } token)
+            context.Token = token;
+        return Task.CompletedTask;
     }
 
     private async Task CheckSessionAsync(TokenValidatedContext context)

@@ -1,11 +1,13 @@
 using Chat.Api.Auth;
 using Chat.Api.Conversations;
 using Chat.Api.Email;
+using Chat.Api.Messaging;
 using Chat.Api.Users;
 using Chat.Data;
 using Chat.Data.Entities;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -18,6 +20,9 @@ builder.Services.AddOptions<AuthOptions>().BindConfiguration(AuthOptions.Section
     .Validate(AuthOptions.IsValid, "Auth:JwtKey must be at least 32 bytes and Auth:CodeKey at least 16 characters.")
     .ValidateOnStart();
 builder.Services.AddOptions<SmtpOptions>().BindConfiguration(SmtpOptions.Section);
+builder.Services.AddOptions<MessagingOptions>().BindConfiguration(MessagingOptions.Section);
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<IUserIdProvider, SubClaimUserIdProvider>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
@@ -53,6 +58,7 @@ app.MapGet("/health", async (ChatDbContext db) =>
 app.MapAuth();
 app.MapUsers();
 app.MapConversations();
+app.MapHub<ChatHub>("/hubs/chat");
 
 app.Run();
 
