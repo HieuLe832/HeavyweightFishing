@@ -39,7 +39,8 @@ A chat app whose frontend look is derived from the Vietnamese fishing game *Câu
 docker compose up -d --wait                     # infrastructure
 cd backend && dotnet test                       # schema and API tests (start their own PostgreSQL, Redis, RabbitMQ and RustFS via Docker)
 cd backend && dotnet run --project src/Chat.Api # API, applies migrations in Development
-cd frontend && npm install && npm run dev
+cd frontend && npm install && npm run dev       # http://localhost:3000, needs the API running
+cd frontend && npm test && npm run lint && npm run build
 ```
 
 After changing entities, add a migration:
@@ -53,7 +54,9 @@ After changing entities, add a migration:
 
 ## Next steps
 
-1. Chat UI with the game-inspired theme (`frontend/`).
+1. Chat UI, next slices (slice 1, the core chat loop, is done; see `docs/superpowers/specs/2026-10-31-chat-ui-core-design.md`): contacts and
+   blocking, starting direct and group chats, attachments and avatars, typing and presence, reactions, edit and delete, mute, reports,
+   settings, password reset, and a web push subscription (the Web Push sender expects the token format in "API: push").
 2. Redraw `03c-dfd-level-2-moderation.drawio` so 6.1 reads D1 (`reported user`) and D4 (`block list`) for user reports; add the
    matching words to the 6.1 row of the README 3c table, check that `02-dfd-level-1.drawio` shows the same reads, regenerate the
    PNGs. Left undone on purpose: it is for the final review to do (see `docs/superpowers/specs/2026-10-31-media-cleanup-design.md`).

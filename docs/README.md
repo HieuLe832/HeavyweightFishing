@@ -230,6 +230,10 @@ Process 4.0: 4.1 Validate Command, 4.2 Store Message, 4.3 Fan Out Events, 4.5 Tr
 **Connecting.** SignalR hub at `/hubs/chat`, authenticated with the access token. Browsers cannot set headers on a
 WebSocket, so the hub also accepts `?access_token=...` (for this path only). The session check of 1.7 runs on connect.
 
+**Browsers.** A page on another origin (the Next.js app) needs CORS for REST and the hub. `Cors:AllowedOrigins` lists the origins
+(Development: `http://localhost:3000`); empty means none. Credentials are off, because tokens travel in the `Authorization` header or the
+query string, never in cookies, so a SignalR client must connect with `withCredentials: false`.
+
 **Commands** are hub methods. A failure is a `HubException` whose message ends with `HubException: <code>`, using the
 same codes as the REST API.
 
