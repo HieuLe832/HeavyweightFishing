@@ -1,4 +1,5 @@
 using Chat.Api.Auth;
+using Chat.Api.Messaging;
 using Chat.Api.Users;
 using Chat.Data;
 using Chat.Data.Entities;
@@ -8,17 +9,18 @@ using Npgsql;
 namespace Chat.Api.Conversations;
 
 /// <summary>Process 3.0: managing a group's title, members and roles.</summary>
-public class GroupService(ChatDbContext db, ConversationReader reader, UserAccess access, TimeProvider time)
+public class GroupService(ChatDbContext db, ConversationReader reader, UserAccess access, MessageWriter messages, MessageBroadcaster broadcaster, TimeProvider time)
 {
     public Task<AuthError?> RenameAsync(Guid userId, Guid conversationId, string title, CancellationToken ct) =>
-        MutateAsync(userId, conversationId, manager: true, ct, m =>
+        MutateAsync(userId, conversationId, manager: true, ct, (m, notices) =>
         {
             m.Conversation.Title = title.Trim();
+            notices.Write("renamed", userId, null, m.Conversation.Title);
             return Task.FromResult<AuthError?>(null);
         });
 
     public Task<AuthError?> AddMembersAsync(Guid userId, Guid conversationId, IEnumerable<Guid> userIds, CancellationToken ct) =>
-        MutateAsync(userId, conversationId, manager: true, ct, async m =>
+        MutateAsync(userId, conversationId, manager: true, ct, async (m, notices) =>
         {
             var ids = userIds.Distinct().ToList();
             var found = await access.FindReachableManyAsync(userId, ids, ct);
@@ -39,6 +41,8 @@ public class GroupService(ChatDbContext db, ConversationReader reader, UserAcces
                 row.JoinedAt = now;
                 row.LeftAt = null;
                 row.MutedUntil = null;
+                // The notice comes first so the member's own "added" line is not unread.
+                notices.Write("member_added", userId, id);
                 row.LastReadSeq = row.LastDeliveredSeq = m.Conversation.LastSeq;
             }
             return null;
@@ -46,7 +50,7 @@ public class GroupService(ChatDbContext db, ConversationReader reader, UserAcces
 
     /// <summary>Removes another member. Owners remove anyone; admins remove plain members only.</summary>
     public Task<AuthError?> RemoveMemberAsync(Guid userId, Guid conversationId, Guid targetId, CancellationToken ct) =>
-        MutateAsync(userId, conversationId, manager: true, ct, async m =>
+        MutateAsync(userId, conversationId, manager: true, ct, async (m, notices) =>
         {
             if (targetId == userId) return AuthError.SelfTarget;
             var target = await FindActiveAsync(conversationId, targetId, ct);
@@ -54,14 +58,18 @@ public class GroupService(ChatDbContext db, ConversationReader reader, UserAcces
             if (m.Member.Role != MemberRole.Owner && target.Role != MemberRole.Member) return AuthError.InsufficientRole;
 
             target.LeftAt = time.GetUtcNow();
+            notices.Write("member_removed", userId, targetId);
+            notices.Departed.Add(targetId);
             return null;
         });
 
     /// <summary>Leaves the group. If the owner leaves, the longest-standing admin (else member) becomes owner.</summary>
     public Task<AuthError?> LeaveAsync(Guid userId, Guid conversationId, CancellationToken ct) =>
-        MutateAsync(userId, conversationId, manager: false, ct, async m =>
+        MutateAsync(userId, conversationId, manager: false, ct, async (m, notices) =>
         {
             m.Member.LeftAt = time.GetUtcNow();
+            notices.Write("member_left", null, userId);
+            notices.Departed.Add(userId);
             if (m.Member.Role != MemberRole.Owner) return null;
 
             var others = await db.ConversationMembers
@@ -73,7 +81,7 @@ public class GroupService(ChatDbContext db, ConversationReader reader, UserAcces
 
     /// <summary>Makes a member an admin or a plain member. Only the owner may, and never for themselves.</summary>
     public Task<AuthError?> SetRoleAsync(Guid userId, Guid conversationId, Guid targetId, MemberRole role, CancellationToken ct) =>
-        MutateAsync(userId, conversationId, manager: false, ct, async m =>
+        MutateAsync(userId, conversationId, manager: false, ct, async (m, _) =>
         {
             if (m.Member.Role != MemberRole.Owner) return AuthError.InsufficientRole;
             if (targetId == userId) return AuthError.SelfTarget;
@@ -92,7 +100,7 @@ public class GroupService(ChatDbContext db, ConversationReader reader, UserAcces
     /// racing (two admins removing each other, the owner leaving while someone is added).
     /// </summary>
     private async Task<AuthError?> MutateAsync(
-        Guid userId, Guid conversationId, bool manager, CancellationToken ct, Func<Membership, Task<AuthError?>> change)
+        Guid userId, Guid conversationId, bool manager, CancellationToken ct, Func<Membership, Notices, Task<AuthError?>> change)
     {
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM conversations WHERE id = {conversationId} FOR UPDATE", ct);
@@ -102,7 +110,8 @@ public class GroupService(ChatDbContext db, ConversationReader reader, UserAcces
         if (membership.Conversation.Type != ConversationType.Group) return AuthError.NotAGroup;
         if (manager && !ConversationRules.CanManage(membership.Member.Role)) return AuthError.InsufficientRole;
 
-        if (await change(membership) is { } error) return error;
+        var notices = new Notices(messages, membership.Conversation);
+        if (await change(membership, notices) is { } error) return error;
 
         membership.Conversation.UpdatedAt = time.GetUtcNow();
         try
@@ -114,6 +123,21 @@ public class GroupService(ChatDbContext db, ConversationReader reader, UserAcces
             return AuthError.Conflict;
         }
         await tx.CommitAsync(ct);
+
+        // Only after the commit, so nobody hears about a change that was rolled back. Members who just left or were removed
+        // are no longer in the member list but still get the notice that ends their membership.
+        foreach (var notice in notices.Written)
+            await broadcaster.PublishAsync("message.created", MessageWriter.ToDto(notice), conversationId, notices.Departed, ct);
         return null;
+    }
+
+    /// <summary>The system notices one group change writes, and the users who must hear of them although they are no longer members.</summary>
+    private sealed class Notices(MessageWriter writer, Conversation conversation)
+    {
+        public List<Message> Written { get; } = [];
+        public List<Guid> Departed { get; } = [];
+
+        public void Write(string kind, Guid? actorId, Guid? userId, string? title = null) =>
+            Written.Add(writer.WriteSystem(conversation, kind, actorId, userId, title));
     }
 }

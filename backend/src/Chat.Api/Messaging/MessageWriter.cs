@@ -2,6 +2,8 @@ using Chat.Api.Auth;
 using Chat.Data;
 using Chat.Data.Entities;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Npgsql;
 
 namespace Chat.Api.Messaging;
@@ -67,6 +69,27 @@ public class MessageWriter(ChatDbContext db, TimeProvider time)
         }
         await tx.CommitAsync(ct);
         return new SendResult(ToDto(message), true);
+    }
+
+    private static readonly JsonSerializerOptions NoticeJson = new(JsonSerializerDefaults.Web) { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
+
+    /// <summary>
+    /// Adds a system notice (a group change) to <paramref name="conversation"/> without saving it. The caller already holds the
+    /// conversation lock and saves in the same transaction as the change, so the notice and the change succeed or fail together.
+    /// The body is data (<c>kind</c>, ids, <c>title</c>), not display text: clients render it.
+    /// </summary>
+    public Message WriteSystem(Conversation conversation, string kind, Guid? actorId, Guid? userId, string? title = null)
+    {
+        var now = time.GetUtcNow();
+        conversation.LastSeq++;
+        var notice = new Message
+        {
+            Id = Guid.NewGuid(), ConversationId = conversation.Id, Seq = conversation.LastSeq, SenderId = null,
+            ClientMsgId = Guid.NewGuid(), Type = MessageType.System, CreatedAt = now,
+            Body = JsonSerializer.Serialize(new { kind, actorId, userId, title }, NoticeJson),
+        };
+        db.Messages.Add(notice);
+        return notice;
     }
 
     /// <summary>Replaces the body of the caller's own message, which <see cref="CommandValidator.CheckMessageAsync"/> returned.</summary>

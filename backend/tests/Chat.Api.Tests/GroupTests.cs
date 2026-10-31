@@ -175,7 +175,7 @@ public class GroupTests(ApiFixture api) : IClassFixture<ApiFixture>
         var mine = (await (await C.GetAsync(a, $"/conversations/{id}")).JsonAsync()).GetProperty("conversation");
         Assert.Equal("member", mine.GetProperty("role").GetString());
         Assert.Equal(0, mine.GetProperty("unread").GetInt64());
-        Assert.Equal(9, mine.GetProperty("lastSeq").GetInt64());
+        Assert.Equal(10, mine.GetProperty("lastSeq").GetInt64()); // the "added" notice took seq 10
     }
 
     [Fact]
