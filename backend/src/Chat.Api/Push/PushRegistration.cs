@@ -33,7 +33,18 @@ public static class PushRegistration
     {
         if (!options.IsEmpty && !File.Exists(options.ServiceAccountJsonPath))
             throw new InvalidOperationException($"Push:Fcm:ServiceAccountJsonPath points at a file that does not exist: {options.ServiceAccountJsonPath}");
-        AddLogging(services, PushPlatform.Fcm);
+        if (options.IsEmpty)
+        {
+            AddLogging(services, PushPlatform.Fcm);
+            return;
+        }
+        var account = ServiceAccount.Load(options.ServiceAccountJsonPath!);
+        services.AddHttpClient("fcm");
+        services.AddSingleton<IPushSender>(sp =>
+        {
+            var http = sp.GetRequiredService<IHttpClientFactory>().CreateClient("fcm");
+            return new FcmPushSender(http, account, new ServiceAccountTokenProvider(http, account, sp.GetRequiredService<TimeProvider>()));
+        });
     }
 
     private static void AddApns(IServiceCollection services, ApnsOptions options)
