@@ -59,9 +59,7 @@ else
     builder.Services.AddSingleton<InMemoryEventBus>();
     builder.Services.AddSingleton<IEventBus>(sp => sp.GetRequiredService<InMemoryEventBus>());
 }
-builder.Services.AddSingleton<IPushSender>(sp => new LoggingPushSender(PushPlatform.Fcm, sp.GetRequiredService<ILogger<LoggingPushSender>>()));
-builder.Services.AddSingleton<IPushSender>(sp => new LoggingPushSender(PushPlatform.Apns, sp.GetRequiredService<ILogger<LoggingPushSender>>()));
-builder.Services.AddSingleton<IPushSender>(sp => new LoggingPushSender(PushPlatform.Web, sp.GetRequiredService<ILogger<LoggingPushSender>>()));
+builder.Services.AddPushSenders(builder.Configuration);
 builder.Services.AddSingleton<IBusHandler, PushDispatcher>();
 builder.Services.AddOptions<MediaOptions>().BindConfiguration(MediaOptions.Section);
 var objectStore = builder.Configuration["ObjectStore:Endpoint"];
@@ -116,7 +114,7 @@ builder.Services.AddScoped<MessageReader>();
 builder.Services.AddScoped<MessageBroadcaster>();
 
 var app = builder.Build();
-app.Logger.LogWarning("No push provider adapter is configured: notifications are logged, not sent.");
+PushRegistration.LogActiveSenders(app.Services.GetServices<IPushSender>(), app.Logger);
 
 if (string.IsNullOrWhiteSpace(objectStore))
     app.Logger.LogWarning("ObjectStore:Endpoint is not configured: uploaded files are kept in memory and lost on restart.");
