@@ -55,6 +55,23 @@ public class ChatHub(
         return deleted.Message;
     }
 
+    public async Task React(Guid messageId, string emoji, bool on)
+    {
+        var ct = Context.ConnectionAborted;
+        var userId = Context.User!.UserId();
+        Fail(await validator.CheckCallerAsync(Context.User!, ct));
+        var found = await validator.CheckMessageAsync(userId, messageId, senderOnly: false, ct);
+        Fail(found.Error);
+        if (string.IsNullOrWhiteSpace(emoji) || emoji.Length > options.Value.MaxEmojiLength) Fail(AuthError.Invalid);
+
+        var change = await writer.SetReactionAsync(userId, found.Value!, emoji, on, ct);
+        Fail(change.Error);
+        if (change.Value!.Changed)
+            await broadcaster.PublishAsync(
+                "message.reaction", new { change.Value.ConversationId, MessageId = messageId, UserId = userId, Emoji = emoji, On = on },
+                change.Value.ConversationId, null, ct);
+    }
+
     private static void Fail(AuthError? error)
     {
         if (error is not null) throw new HubException(error.Code);

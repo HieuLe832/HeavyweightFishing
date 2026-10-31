@@ -12,6 +12,9 @@ public record SendResult(MessageDto Message, bool Created);
 /// <param name="Changed">False when the message was already deleted.</param>
 public record DeleteResult(MessageDto Message, bool Changed);
 
+/// <param name="Changed">False when the reaction was already in the requested state.</param>
+public record ReactionChange(Guid ConversationId, bool Changed);
+
 /// <summary>Process 4.2: the only writer of D6.</summary>
 public class MessageWriter(ChatDbContext db, TimeProvider time)
 {
@@ -73,7 +76,7 @@ public class MessageWriter(ChatDbContext db, TimeProvider time)
         message.Body = body;
         message.EditedAt = time.GetUtcNow();
         await db.SaveChangesAsync(ct);
-        return ToDto(message);
+        return ToDto(message, await ReactionCountsAsync(message.Id, ct));
     }
 
     /// <summary>
@@ -82,12 +85,49 @@ public class MessageWriter(ChatDbContext db, TimeProvider time)
     /// </summary>
     public async Task<DeleteResult> DeleteAsync(Message message, CancellationToken ct)
     {
-        if (message.DeletedAt is not null) return new DeleteResult(ToDto(message), false);
-        message.Body = null;
-        message.DeletedAt = time.GetUtcNow();
-        await db.SaveChangesAsync(ct);
-        return new DeleteResult(ToDto(message), true);
+        var changed = message.DeletedAt is null;
+        if (changed)
+        {
+            message.Body = null;
+            message.DeletedAt = time.GetUtcNow();
+            await db.SaveChangesAsync(ct);
+        }
+        return new DeleteResult(ToDto(message, await ReactionCountsAsync(message.Id, ct)), changed);
     }
+
+    /// <summary>
+    /// Adds or removes the caller's reaction, which is a state rather than a toggle so a retry cannot flip it.
+    /// <paramref name="message"/> comes from <see cref="CommandValidator.CheckMessageAsync"/>.
+    /// </summary>
+    public async Task<Result<ReactionChange>> SetReactionAsync(Guid userId, Message message, string emoji, bool on, CancellationToken ct)
+    {
+        if (message.DeletedAt is not null) return AuthError.MessageDeleted;
+        var exists = await db.MessageReactions.AnyAsync(r => r.MessageId == message.Id && r.UserId == userId && r.Emoji == emoji, ct);
+        if (exists == on) return new ReactionChange(message.ConversationId, false);
+
+        if (!on)
+        {
+            var removed = await db.MessageReactions
+                .Where(r => r.MessageId == message.Id && r.UserId == userId && r.Emoji == emoji).ExecuteDeleteAsync(ct);
+            return new ReactionChange(message.ConversationId, removed > 0);
+        }
+
+        db.MessageReactions.Add(new MessageReaction { MessageId = message.Id, UserId = userId, Emoji = emoji, CreatedAt = time.GetUtcNow() });
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException e) when (e.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            return new ReactionChange(message.ConversationId, false); // the same reaction arrived at the same moment
+        }
+        return new ReactionChange(message.ConversationId, true);
+    }
+
+    /// <summary>Counts per emoji for events. <c>Mine</c> is false: an event goes to everyone, so it cannot say whose it is.</summary>
+    private Task<List<ReactionCount>> ReactionCountsAsync(Guid messageId, CancellationToken ct) =>
+        db.MessageReactions.Where(r => r.MessageId == messageId).GroupBy(r => r.Emoji)
+            .Select(g => new ReactionCount(g.Key, g.Count(), false)).ToListAsync(ct);
 
     /// <summary>The sender's earlier message with this client id: that message in the same conversation, else a conflict.</summary>
     private async Task<Result<SendResult>?> FindExistingAsync(Guid senderId, Guid conversationId, Guid clientMsgId, CancellationToken ct)
