@@ -1,0 +1,210 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError, createApi, createLocalTokenStore, type TokenStore } from "./api";
+
+function memoryTokens(access: string | null = "access-1", refresh: string | null = "refresh-1"): TokenStore {
+  let a = access;
+  let r = refresh;
+  return { getAccess: () => a, setAccess: (t) => (a = t), getRefresh: () => r, setRefresh: (t) => (r = t) };
+}
+
+const user = { id: "u1", username: "ann", email: "ann@example.com", displayName: "Ann", role: "user" };
+const auth = (n: number) => ({ accessToken: `access-${n}`, expiresIn: 900, refreshToken: `refresh-${n}`, user });
+
+function json(status: number, body?: unknown): Response {
+  return new Response(body === undefined ? null : JSON.stringify(body), {
+    status,
+    headers: body === undefined ? {} : { "Content-Type": status >= 400 ? "application/problem+json" : "application/json" },
+  });
+}
+
+type Handler = (url: string, init: RequestInit) => Response | Promise<Response>;
+
+function setup(handler: Handler, tokens = memoryTokens()) {
+  const calls: { url: string; init: RequestInit }[] = [];
+  const fetchFn = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+    calls.push({ url: String(url), init: init ?? {} });
+    return handler(String(url), init ?? {});
+  });
+  const onSessionEnded = vi.fn();
+  const api = createApi({ baseUrl: "http://api.test", tokens, fetch: fetchFn as unknown as typeof fetch, onSessionEnded });
+  return { api, calls, tokens, onSessionEnded, fetchFn };
+}
+
+const header = (init: RequestInit, name: string) => new Headers(init.headers).get(name);
+
+describe("api.request", () => {
+  it("sends the bearer token and a JSON body", async () => {
+    const { api, calls } = setup(() => json(200, { ok: true }));
+
+    const result = await api.request("POST", "/conversations/direct", { userId: "u2" });
+
+    expect(result).toEqual({ ok: true });
+    expect(calls[0].url).toBe("http://api.test/conversations/direct");
+    expect(calls[0].init.method).toBe("POST");
+    expect(header(calls[0].init, "Authorization")).toBe("Bearer access-1");
+    expect(header(calls[0].init, "Content-Type")).toBe("application/json");
+    expect(calls[0].init.body).toBe(JSON.stringify({ userId: "u2" }));
+  });
+
+  it("turns a problem+json response into an ApiError with status, code and fields", async () => {
+    const { api } = setup(() => json(400, { title: "Bad", code: "validation_failed", errors: { email: ["Enter a valid email address."] } }));
+
+    const error = await api.request("POST", "/auth/register", {}).catch((e) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.status).toBe(400);
+    expect(error.code).toBe("validation_failed");
+    expect(error.fields).toEqual({ email: ["Enter a valid email address."] });
+  });
+
+  it("turns a non-JSON error body (a proxy's HTML page) into code unknown", async () => {
+    const { api } = setup(() => new Response("<html>Bad gateway</html>", { status: 502, headers: { "Content-Type": "text/html" } }));
+
+    const error = await api.request("GET", "/conversations").catch((e) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.status).toBe(502);
+    expect(error.code).toBe("unknown");
+  });
+
+  it("resolves to undefined for 204", async () => {
+    const { api } = setup(() => json(204));
+
+    await expect(api.request("DELETE", "/x")).resolves.toBeUndefined();
+  });
+
+  it("sends no Authorization header without a token", async () => {
+    const { api, calls } = setup(() => json(200, {}), memoryTokens(null, null));
+
+    await api.request("GET", "/health");
+
+    expect(header(calls[0].init, "Authorization")).toBeNull();
+  });
+});
+
+describe("token refresh", () => {
+  it("refreshes once on 401 and retries the request with the new token", async () => {
+    const { api, calls, tokens } = setup((url, init) => {
+      if (url.endsWith("/auth/refresh")) return json(200, auth(2));
+      return header(init, "Authorization") === "Bearer access-2" ? json(200, { ok: 1 }) : json(401, { code: "unauthorized" });
+    });
+
+    await expect(api.request("GET", "/conversations")).resolves.toEqual({ ok: 1 });
+
+    expect(calls.map((c) => c.url)).toEqual(["http://api.test/conversations", "http://api.test/auth/refresh", "http://api.test/conversations"]);
+    expect(JSON.parse(calls[1].init.body as string)).toEqual({ refreshToken: "refresh-1" });
+    expect(tokens.getAccess()).toBe("access-2");
+    expect(tokens.getRefresh()).toBe("refresh-2");
+  });
+
+  it("shares one refresh call between concurrent 401s", async () => {
+    const { api, calls } = setup(async (url, init) => {
+      if (url.endsWith("/auth/refresh")) {
+        await new Promise((r) => setTimeout(r, 10));
+        return json(200, auth(2));
+      }
+      return header(init, "Authorization") === "Bearer access-2" ? json(200, {}) : json(401, {});
+    });
+
+    await Promise.all([api.request("GET", "/a"), api.request("GET", "/b"), api.request("GET", "/c")]);
+
+    expect(calls.filter((c) => c.url.endsWith("/auth/refresh"))).toHaveLength(1);
+  });
+
+  it("clears both tokens and ends the session when the refresh token is rejected, without looping", async () => {
+    const { api, calls, tokens, onSessionEnded } = setup((url) =>
+      url.endsWith("/auth/refresh") ? json(401, { code: "invalid_refresh_token" }) : json(401, { code: "unauthorized" }));
+
+    const error = await api.request("GET", "/conversations").catch((e) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.status).toBe(401);
+    expect(calls).toHaveLength(2); // the request and one refresh: no retry, no second refresh
+    expect(tokens.getAccess()).toBeNull();
+    expect(tokens.getRefresh()).toBeNull();
+    expect(onSessionEnded).toHaveBeenCalled();
+  });
+
+  it("does not log out when the refresh fails for a network reason", async () => {
+    const { api, tokens, onSessionEnded } = setup((url) => {
+      if (url.endsWith("/auth/refresh")) throw new TypeError("network down");
+      return json(401, {});
+    });
+
+    await expect(api.request("GET", "/conversations")).rejects.toThrow();
+
+    expect(tokens.getRefresh()).toBe("refresh-1");
+    expect(onSessionEnded).not.toHaveBeenCalled();
+  });
+
+  it("retries only once: a second 401 after refreshing is an error", async () => {
+    const { api, calls } = setup((url) => (url.endsWith("/auth/refresh") ? json(200, auth(2)) : json(401, {})));
+
+    await expect(api.request("GET", "/conversations")).rejects.toBeInstanceOf(ApiError);
+
+    expect(calls).toHaveLength(3);
+  });
+
+  it("never refreshes for the auth endpoints themselves", async () => {
+    const { api, calls } = setup(() => json(401, { code: "invalid_credentials" }));
+
+    const error = await api.login("ann", "wrong").catch((e) => e);
+
+    expect(error.code).toBe("invalid_credentials");
+    expect(calls).toHaveLength(1);
+  });
+});
+
+describe("auth calls", () => {
+  it("login stores both tokens and returns the response", async () => {
+    const { api, tokens, calls } = setup(() => json(200, auth(5)), memoryTokens(null, null));
+
+    const result = await api.login("ann", "pw");
+
+    expect(result.user.username).toBe("ann");
+    expect(tokens.getAccess()).toBe("access-5");
+    expect(tokens.getRefresh()).toBe("refresh-5");
+    expect(JSON.parse(calls[0].init.body as string)).toEqual({ identifier: "ann", password: "pw" });
+  });
+
+  it("logout clears the tokens even if the server call fails", async () => {
+    const { api, tokens } = setup(() => {
+      throw new TypeError("offline");
+    });
+
+    await api.logout();
+
+    expect(tokens.getAccess()).toBeNull();
+    expect(tokens.getRefresh()).toBeNull();
+  });
+
+  it("register, verifyEmail and resendVerification post to their endpoints", async () => {
+    const { api, calls } = setup(() => json(202, {}));
+
+    await api.register({ username: "ann", email: "ann@example.com", password: "password1", displayName: "Ann" });
+    await api.verifyEmail("ann@example.com", "123456");
+    await api.resendVerification("ann@example.com");
+
+    expect(calls.map((c) => c.url.replace("http://api.test", ""))).toEqual(["/auth/register", "/auth/verify-email", "/auth/resend-verification"]);
+    expect(JSON.parse(calls[1].init.body as string)).toEqual({ email: "ann@example.com", code: "123456" });
+  });
+});
+
+describe("createLocalTokenStore", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("keeps the access token in memory and the refresh token in localStorage", () => {
+    const store = createLocalTokenStore();
+
+    store.setAccess("a");
+    store.setRefresh("r");
+
+    expect(localStorage.getItem("refreshToken")).toBe("r");
+    expect(localStorage.getItem("accessToken")).toBeNull();
+    expect(createLocalTokenStore().getRefresh()).toBe("r");
+    expect(createLocalTokenStore().getAccess()).toBeNull();
+
+    store.setRefresh(null);
+    expect(localStorage.getItem("refreshToken")).toBeNull();
+  });
+});
