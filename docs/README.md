@@ -15,6 +15,7 @@ All diagrams are draw.io files in [diagrams/](diagrams/), each with a light-mode
 | 2 | DFD level 1 | [02-dfd-level-1.drawio](diagrams/02-dfd-level-1.drawio) |
 | 3a | DFD level 2: 1.0 Authenticate & Authorize | [03a-dfd-level-2-auth.drawio](diagrams/03a-dfd-level-2-auth.drawio) |
 | 3b | DFD level 2: 4.0 Exchange Messages | [03b-dfd-level-2-messaging.drawio](diagrams/03b-dfd-level-2-messaging.drawio) |
+| 3c | DFD level 2: 6.0 Moderate & Audit | [03c-dfd-level-2-moderation.drawio](diagrams/03c-dfd-level-2-moderation.drawio) |
 | 4 | Entity relationship diagram | [04-erd.drawio](diagrams/04-erd.drawio) |
 
 ## Notation
@@ -73,8 +74,8 @@ The ERD uses **crow's-foot** notation. Each table's header colour matches the DF
 
 ## 3. DFD level 2
 
-Only the two processes with real internal logic are decomposed. Processes 2.0, 3.0, 5.0 and 6.0
-are mostly validate-then-read/write and are already fully described at level 1.
+The processes with real internal logic are decomposed: auth, messaging, and moderation. Processes
+2.0, 3.0 and 5.0 are mostly validate-then-read/write and are already fully described at level 1.
 
 ### 3a. Process 1.0 Authenticate & Authorize
 
@@ -104,6 +105,20 @@ Banning a user in 6.0 revokes their sessions in D2, so both 1.5 and 1.7 reject t
 | 4.4 Send Push Notifications | Skips muted members and sends a short preview to each device's push token |
 | 4.5 Track Receipts, Typing & Presence | Moves each member's read / delivered cursor, keeps online and typing state in Redis, and emits those events through 4.3 |
 | 4.6 Serve History & Sync | Returns message pages before or after a `seq`, so a reconnecting client fills exactly the gap it missed |
+
+### 3c. Process 6.0 Moderate & Audit
+
+![DFD level 2 for 6.0](diagrams/03c-dfd-level-2-moderation.png)
+
+| Sub-process | Does |
+|-------------|------|
+| 6.1 Submit Report | Any signed-in user reports a user or message. Checks the reporter is a member of that message's conversation, then stores the report with a snapshot of the message as evidence |
+| 6.2 Review Reports | Lists open reports with their evidence and the users involved. Every view of evidence is sent to 6.3, because admins are reading private messages |
+| 6.3 Record Audit Entry | The only writer of the audit log. It records who did what to which target; entries are never updated or deleted |
+| 6.4 Apply Moderation Decision | Bans or unbans a user and actions or dismisses a report. A ban sets the account status and revokes every session, so the user is signed out everywhere at once |
+| 6.5 Query Audit Log | Lets admins search the audit log by actor, action and date |
+
+6.2, 6.4 and 6.5 need `role = admin` in the verified principal; 6.1 is open to every user.
 
 ## 4. ERD
 
