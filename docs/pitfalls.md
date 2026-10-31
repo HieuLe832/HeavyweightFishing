@@ -97,6 +97,12 @@ Things that look fine and break later. Many are pinned by tests in
 - **A topic exchange drops messages with no queue.** Queues are declared by `RabbitMqConsumer`. Publishing before any consumer has
   started (or with a handler removed) loses the event; that is fine for push, not for anything that must not be lost.
 - **`SetTyping` renews, it does not toggle.** Keep the key's TTL short; a stuck typing indicator means a client stopped sending.
+- **Push re-checks everything.** `PushDispatcher` re-reads membership, mute, user status, deletion and presence, because the event
+  may have sat in a queue. Do not trust `offlineUserIds` as a final answer.
+- **Push is best effort and has no retry.** Retrying the event re-notifies devices that already got it. Clear tokens the provider
+  rejects; do not throw for a single bad device.
+- **A push preview leaves the system.** The text goes to FCM / APNs / Web Push. Do not add more than the 100-character preview, and
+  do not log it.
 - **The per-user rate limiters are per node.** With several nodes the real limit is the limit times the node count.
 
 ## Tooling

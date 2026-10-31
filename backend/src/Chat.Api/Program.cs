@@ -2,6 +2,7 @@ using Chat.Api.Auth;
 using Chat.Api.Conversations;
 using Chat.Api.Email;
 using Chat.Api.Messaging;
+using Chat.Api.Push;
 using Chat.Api.Realtime;
 using Chat.Api.Users;
 using Chat.Data;
@@ -56,6 +57,10 @@ else
     builder.Services.AddSingleton<InMemoryEventBus>();
     builder.Services.AddSingleton<IEventBus>(sp => sp.GetRequiredService<InMemoryEventBus>());
 }
+builder.Services.AddSingleton<IPushSender>(sp => new LoggingPushSender(PushPlatform.Fcm, sp.GetRequiredService<ILogger<LoggingPushSender>>()));
+builder.Services.AddSingleton<IPushSender>(sp => new LoggingPushSender(PushPlatform.Apns, sp.GetRequiredService<ILogger<LoggingPushSender>>()));
+builder.Services.AddSingleton<IPushSender>(sp => new LoggingPushSender(PushPlatform.Web, sp.GetRequiredService<ILogger<LoggingPushSender>>()));
+builder.Services.AddSingleton<IBusHandler, PushDispatcher>();
 builder.Services.AddSingleton<ConnectionRegistry>();
 builder.Services.AddSingleton<PresenceService>();
 builder.Services.AddHostedService<PresenceRefresher>();
@@ -88,6 +93,7 @@ builder.Services.AddScoped<MessageReader>();
 builder.Services.AddScoped<MessageBroadcaster>();
 
 var app = builder.Build();
+app.Logger.LogWarning("No push provider adapter is configured: notifications are logged, not sent.");
 
 if (string.IsNullOrWhiteSpace(redis) || string.IsNullOrWhiteSpace(rabbitMq))
     app.Logger.LogWarning("Redis or RabbitMQ is not configured: running as a single node with in-memory presence and events.");
@@ -109,6 +115,7 @@ app.MapUsers();
 app.MapConversations();
 app.MapHistory();
 app.MapPresence();
+app.MapPush();
 app.MapHub<ChatHub>("/hubs/chat");
 
 app.Run();

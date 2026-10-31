@@ -1,4 +1,5 @@
 using Chat.Api.Email;
+using Chat.Api.Push;
 using Chat.Api.Realtime;
 using Chat.Data;
 using Microsoft.AspNetCore.Builder;
@@ -37,6 +38,9 @@ public class ApiFixture : IAsyncLifetime
     public FaultablePresenceStore Presence { get; private set; } = null!;
 
     /// <summary>What went onto the event bus (RabbitMQ is not configured in tests).</summary>
+    /// <summary>Every notification the (fake) push providers were asked to send.</summary>
+    public RecordingPushSender Push { get; } = new();
+
     public InMemoryEventBus Bus => _factory.Services.GetRequiredService<InMemoryEventBus>();
 
     public async Task InitializeAsync()
@@ -136,6 +140,10 @@ public class ApiFixture : IAsyncLifetime
                 services.RemoveAll<TimeProvider>();
                 services.AddSingleton<TimeProvider>(owner.Time);
                 services.AddTransient<IStartupFilter, AdminRouteFilter>();
+                services.RemoveAll<IPushSender>();
+                services.AddSingleton<IPushSender>(owner.Push.For(Chat.Data.PushPlatform.Fcm));
+                services.AddSingleton<IPushSender>(owner.Push.For(Chat.Data.PushPlatform.Apns));
+                services.AddSingleton<IPushSender>(owner.Push.For(Chat.Data.PushPlatform.Web));
                 if (!owner._settings.ContainsKey("Redis:ConnectionString"))
                 {
                     services.RemoveAll<IPresenceStore>();

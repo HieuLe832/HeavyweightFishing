@@ -225,7 +225,7 @@ Rules:
 
 Process 4.0: 4.1 Validate Command, 4.2 Store Message, 4.3 Fan Out Events, 4.5 Track Receipts, Typing & Presence (see
 [API: receipts, typing and presence](#api-receipts-typing-and-presence)) and 4.6 Serve History & Sync.
-4.4 push comes in a later slice. Text messages only; media waits for 5.0.
+4.4 Send Push Notifications (see [API: push](#api-push)). Text messages only; media waits for 5.0.
 
 **Connecting.** SignalR hub at `/hubs/chat`, authenticated with the access token. Browsers cannot set headers on a
 WebSocket, so the hub also accepts `?access_token=...` (for this path only). The session check of 1.7 runs on connect.
@@ -303,6 +303,32 @@ Process 4.5 and the real-time half of 4.3. Same hub (`/hubs/chat`), same error c
   senderId, offlineUserIds }`. It carries ids, never text. Consumers (`IBusHandler`) get a durable queue `chat.<name>` and a
   dead-letter queue `chat.<name>.dead`; a handler that throws dead-letters the message. With `RabbitMq:Uri` unset an in-process bus
   runs the handlers inline. Live sockets never use RabbitMQ.
+
+## API: push
+
+Process 4.4. Consumes the `message.created` event that 4.3 publishes for offline members (see the last bullet of the section
+above) and notifies each of their devices.
+
+| Route | Does |
+|-------|------|
+| `PUT /auth/sessions/current/push-token` `{ platform, token }` | Stores the push token of the calling session. `platform` is `fcm`, `apns` or `web`; the token is 1-4096 characters without spaces (else `validation_failed`) |
+| `DELETE /auth/sessions/current/push-token` | Clears it |
+
+- A token already held by another session of the same user moves to the calling session, so one device does not notify twice
+  after a re-login. Logout revokes the session and ends its pushes.
+- **Who is notified:** offline members of the conversation (checked again when the event is handled, because it may have waited
+  in the queue): still an active member, not muted (`muted_until` empty or past), account `active`, and not online now. Never
+  the sender, never system notices, never a message deleted in the meantime. One notification per non-revoked, unexpired session
+  that holds a token.
+- **Content:** title is the sender's display name (`Name · Group title` in a group); body is the text cut at 100 characters
+  with `…`, or `Sent an attachment` when there is no text. The ids `conversationId`, `messageId` and `seq` travel with it so the
+  app can open the chat. The push service sees this preview.
+- **Providers** sit behind `IPushSender`, one per platform. **Only a logging sender ships**: it logs the event (not its text) and
+  sends nothing, and the API warns about it at start. FCM, APNs and Web Push adapters need the operator's credentials and are
+  registered as `IPushSender`s.
+- **Best effort:** a failed device is logged and skipped, with no retry (a retry would re-notify the devices that succeeded). A
+  provider answer of `InvalidToken` clears that session's token. Only an infrastructure error (database down) dead-letters the
+  event.
 
 ## Pitfalls
 
