@@ -43,6 +43,7 @@ builder.Services.AddScoped<GroupService>();
 builder.Services.AddSingleton<MessageRateLimiter>();
 builder.Services.AddScoped<CommandValidator>();
 builder.Services.AddScoped<MessageWriter>();
+builder.Services.AddScoped<MessageReader>();
 builder.Services.AddScoped<MessageBroadcaster>();
 
 var app = builder.Build();
@@ -62,6 +63,7 @@ app.MapGet("/health", async (ChatDbContext db) =>
 app.MapAuth();
 app.MapUsers();
 app.MapConversations();
+app.MapHistory();
 app.MapHub<ChatHub>("/hubs/chat");
 
 app.Run();
