@@ -14,14 +14,14 @@ public record SetRoleRequest(string? Role);
 
 public record MuteRequest(DateTimeOffset? Until);
 
-public record PersonBrief(Guid Id, string Username, string DisplayName);
+public record PersonBrief(Guid Id, string Username, string DisplayName, Guid? AvatarMediaId);
 
 /// <summary>One conversation as its member sees it. <c>Peer</c> is the other person in a direct chat.</summary>
 public record ConversationSummary(
     Guid Id, string Type, string? Title, PersonBrief? Peer, long LastSeq, long Unread,
-    DateTimeOffset? MutedUntil, string Role, DateTimeOffset UpdatedAt);
+    DateTimeOffset? MutedUntil, string Role, DateTimeOffset UpdatedAt, Guid? AvatarMediaId);
 
-public record MemberSummary(Guid UserId, string Username, string DisplayName, string Role, DateTimeOffset JoinedAt, long LastDeliveredSeq, long LastReadSeq);
+public record MemberSummary(Guid UserId, string Username, string DisplayName, string Role, DateTimeOffset JoinedAt, long LastDeliveredSeq, long LastReadSeq, Guid? AvatarMediaId);
 
 public record ConversationDetail(ConversationSummary Conversation, List<MemberSummary> Members);
 

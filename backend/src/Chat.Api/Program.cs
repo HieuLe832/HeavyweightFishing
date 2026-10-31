@@ -1,6 +1,7 @@
 using Chat.Api.Auth;
 using Chat.Api.Conversations;
 using Chat.Api.Email;
+using Chat.Api.Files;
 using Chat.Api.Messaging;
 using Chat.Api.Push;
 using Chat.Api.Realtime;
@@ -61,6 +62,19 @@ builder.Services.AddSingleton<IPushSender>(sp => new LoggingPushSender(PushPlatf
 builder.Services.AddSingleton<IPushSender>(sp => new LoggingPushSender(PushPlatform.Apns, sp.GetRequiredService<ILogger<LoggingPushSender>>()));
 builder.Services.AddSingleton<IPushSender>(sp => new LoggingPushSender(PushPlatform.Web, sp.GetRequiredService<ILogger<LoggingPushSender>>()));
 builder.Services.AddSingleton<IBusHandler, PushDispatcher>();
+builder.Services.AddOptions<MediaOptions>().BindConfiguration(MediaOptions.Section);
+var objectStore = builder.Configuration["ObjectStore:Endpoint"];
+if (!string.IsNullOrWhiteSpace(objectStore))
+    builder.Services.AddSingleton<IObjectStore>(new S3ObjectStore(new ObjectStoreSettings(
+        objectStore, builder.Configuration["ObjectStore:AccessKey"] ?? "", builder.Configuration["ObjectStore:SecretKey"] ?? "",
+        builder.Configuration["ObjectStore:Bucket"] ?? "chat-media")));
+else
+{
+    builder.Services.AddSingleton<InMemoryObjectStore>();
+    builder.Services.AddSingleton<IObjectStore>(sp => sp.GetRequiredService<InMemoryObjectStore>());
+}
+builder.Services.AddSingleton<UploadRateLimiter>();
+builder.Services.AddScoped<MediaService>();
 builder.Services.AddSingleton<ConnectionRegistry>();
 builder.Services.AddSingleton<PresenceService>();
 builder.Services.AddHostedService<PresenceRefresher>();
@@ -95,6 +109,8 @@ builder.Services.AddScoped<MessageBroadcaster>();
 var app = builder.Build();
 app.Logger.LogWarning("No push provider adapter is configured: notifications are logged, not sent.");
 
+if (string.IsNullOrWhiteSpace(objectStore))
+    app.Logger.LogWarning("ObjectStore:Endpoint is not configured: uploaded files are kept in memory and lost on restart.");
 if (string.IsNullOrWhiteSpace(redis) || string.IsNullOrWhiteSpace(rabbitMq))
     app.Logger.LogWarning("Redis or RabbitMQ is not configured: running as a single node with in-memory presence and events.");
 
@@ -116,6 +132,7 @@ app.MapConversations();
 app.MapHistory();
 app.MapPresence();
 app.MapPush();
+app.MapMedia();
 app.MapHub<ChatHub>("/hubs/chat");
 
 app.Run();

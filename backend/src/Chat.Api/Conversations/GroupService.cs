@@ -19,6 +19,14 @@ public class GroupService(ChatDbContext db, ConversationReader reader, UserAcces
             return Task.FromResult<AuthError?>(null);
         });
 
+    /// <summary>Sets or clears (<paramref name="mediaId"/> null) the group's avatar. Owners and admins only; no system notice.</summary>
+    public Task<AuthError?> SetAvatarAsync(Guid userId, Guid conversationId, Guid? mediaId, CancellationToken ct) =>
+        MutateAsync(userId, conversationId, manager: true, ct, (m, _) =>
+        {
+            m.Conversation.AvatarMediaId = mediaId;
+            return Task.FromResult<AuthError?>(null);
+        });
+
     public Task<AuthError?> AddMembersAsync(Guid userId, Guid conversationId, IEnumerable<Guid> userIds, CancellationToken ct) =>
         MutateAsync(userId, conversationId, manager: true, ct, async (m, notices) =>
         {

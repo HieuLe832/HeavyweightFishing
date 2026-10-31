@@ -105,7 +105,24 @@ Things that look fine and break later. Many are pinned by tests in
   do not log it.
 - **The per-user rate limiters are per node.** With several nodes the real limit is the limit times the node count.
 
+## Media
+
+- **Never trust the client's content type or file name.** `MediaSniffer` decides from the bytes. SVG and HTML are not types: markup
+  is stored as `text/plain` and served with `nosniff` as a download. Do not add a type that browsers render without also thinking
+  about script.
+- **A header is not a decode.** Dimensions come from the header and may lie. Serve with the locked-down headers in `MediaEndpoints`
+  and never inline anything but images; if you ever resize or re-encode, do it in a sandbox.
+- **Authorise on every download.** Access follows membership and message deletion, so do not hand out long-lived presigned URLs.
+  A forbidden file and a missing file must give the same `media_not_found`.
+- **`invalid_attachment` hides who owns what.** A missing file and someone else's file give the same error.
+- **Deleting a message does not delete the bytes.** Rows and objects stay (reports may need them); a cleanup job is future work.
+- **`Chat.Api.Media` would clash with the `Media` entity,** so the code is in `Chat.Api.Files`.
+- **S3-compatible stores and checksums.** `S3ObjectStore` turns off the SDK's default checksum trailers (`WHEN_REQUIRED`) because
+  RustFS-style servers do not all support them.
+- **RustFS needs a writable `/data` it owns.** A `tmpfs` mount owned by root makes it exit with "Permission denied"; use a volume.
+
 ## Tooling
+
 
 
 - **Edit `.drawio` files, never the PNGs.** Regenerate the PNG after every diagram change (see

@@ -184,7 +184,7 @@ Rules:
 - Banned and pending users are invisible to lookups and search. You can still list and remove a block on a
   banned user.
 - Contacts are private and one-way: adding someone does not add you to their list.
-- Avatars are not here: they need media upload (5.0).
+- Profiles carry `avatarMediaId`; set it with `PUT /users/me/avatar` (see [API: media](#api-media)).
 
 ## API: conversations
 
@@ -225,7 +225,7 @@ Rules:
 
 Process 4.0: 4.1 Validate Command, 4.2 Store Message, 4.3 Fan Out Events, 4.5 Track Receipts, Typing & Presence (see
 [API: receipts, typing and presence](#api-receipts-typing-and-presence)) and 4.6 Serve History & Sync.
-4.4 Send Push Notifications (see [API: push](#api-push)). Text messages only; media waits for 5.0.
+4.4 Send Push Notifications (see [API: push](#api-push)). Messages carry text or attachments (see [API: media](#api-media)).
 
 **Connecting.** SignalR hub at `/hubs/chat`, authenticated with the access token. Browsers cannot set headers on a
 WebSocket, so the hub also accepts `?access_token=...` (for this path only). The session check of 1.7 runs on connect.
@@ -236,14 +236,16 @@ same codes as the REST API.
 | Method | Arguments | Returns |
 |--------|-----------|---------|
 | `SendMessage` | `conversationId`, `clientMsgId`, `body`, `replyToId?` | the stored message (also the ack) |
-| `EditMessage` | `messageId`, `body` | the message |
+| `SendMedia` | `conversationId`, `clientMsgId`, `caption?`, `mediaIds`, `replyToId?` | the stored message with its attachments (see [API: media](#api-media)) |
+| `EditMessage` | `messageId`, `body` | the message (for a media message, the caption is edited) |
 | `DeleteMessage` | `messageId` | the message as a tombstone |
 | `React` | `messageId`, `emoji`, `on` | nothing. `on` sets state (add / remove), so a retry cannot flip it |
 
 **Events** go to every connected device of every active member, the sender's other devices included:
 `message.created` (also for system notices), `message.edited`, `message.deleted` (all carry a message) and
 `message.reaction` `{ conversationId, messageId, userId, emoji, on }`. A message is `{ id, conversationId, seq,
-senderId?, clientMsgId, type, body?, replyToId?, createdAt, editedAt?, deletedAt?, reactions: [{ emoji, count, mine }] }`.
+senderId?, clientMsgId, type, body?, replyToId?, createdAt, editedAt?, deletedAt?, reactions: [{ emoji, count, mine }],
+attachments: [{ mediaId, mimeType, sizeBytes, width?, height? }] }`. `type` is `text`, `media` or `system`.
 In events `mine` is always false, since one event goes to everyone.
 
 **History:** `GET /conversations/{id}/messages?before=&after=&limit=` returns `{ messages, hasMore }` in ascending `seq`.
@@ -329,6 +331,36 @@ above) and notifies each of their devices.
 - **Best effort:** a failed device is logged and skipped, with no retry (a retry would re-notify the devices that succeeded). A
   provider answer of `InvalidToken` clears that session's token. Only an infrastructure error (database down) dead-letters the
   event.
+
+## API: media
+
+Process 5.0 and the attachment checks of 4.1. Bytes live in the object store (D7), metadata in `media`.
+
+| Route | Does |
+|-------|------|
+| `POST /media` | `multipart/form-data`, one part named `file`. `201 { id, mimeType, sizeBytes, width?, height? }` |
+| `GET /media/{id}` | The bytes, if the caller may read them (below). Supports `If-None-Match` (the ETag is the SHA-256) |
+| `PUT /users/me/avatar` `{ mediaId }`, `DELETE /users/me/avatar` | Own avatar |
+| `PUT /conversations/{id}/avatar` `{ mediaId }`, `DELETE …` | A group's avatar, owners and admins (`not_a_group` for a direct chat, no system notice) |
+
+- **Upload checks.** Up to 10 MiB (`file_too_large`, 413). The type comes from the bytes, not from the client:
+  PNG, JPEG, GIF, WebP (with width and height), PDF, and UTF-8 plain text; anything else is `unsupported_media_type` (415).
+  There is no SVG or HTML type: markup is stored as `text/plain` and never rendered. 20 uploads per minute per user
+  (`rate_limited`). The header is checked, not decoded, so an image can still be broken. Original file names are not kept.
+- **Who may read a file** (else `media_not_found`, the same answer as for a missing file): its uploader; an active member of a
+  conversation with a non-deleted message that has it attached; anyone who may see a user whose avatar it is (a user who
+  blocked the viewer looks missing); an active member of a conversation whose avatar it is. Access is decided on every request,
+  so leaving a group or deleting the message ends it at once.
+- **Downloads** are sent with `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'; sandbox`,
+  `Cache-Control: private`, and `Content-Disposition: inline` for images only (everything else is `attachment`).
+- **Attaching.** Upload first, then `SendMedia`: 1-10 distinct files, each `ready` and uploaded by the sender (else
+  `invalid_attachment`; a wrong count, duplicates or a caption over 4000 characters are `validation_failed`). The caption is
+  optional. Everything else is as for `SendMessage` (session, membership, blocks, rate limit, `clientMsgId` dedupe, events, push).
+  A deleted message shows no attachments, and its files stop being readable by other members (the bytes stay in the store).
+- **Avatars** must be a ready image the caller uploaded (`unsupported_media_type` / `media_not_found`). Replacing one leaves the
+  old file in the store. `avatarMediaId` appears in profiles, conversation summaries, `peer` and member lists.
+- **Object store.** `ObjectStore:Endpoint` (with `AccessKey`, `SecretKey`, `Bucket`) selects the S3 store (RustFS in Compose,
+  bucket created on first use); without it files are kept in memory and the API warns at start.
 
 ## Pitfalls
 

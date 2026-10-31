@@ -34,11 +34,25 @@ public class ChatHub(
         var ct = Context.ConnectionAborted;
         Fail(await validator.CheckCallerAsync(Context.User!, ct));
         Fail(await validator.CheckSendAsync(Context.User!, conversationId, clientMsgId, body, replyToId, ct));
+        return await StoreAndDeliver(conversationId, clientMsgId, CommandValidator.NormalizeBody(body, options.Value.MaxBodyLength)!, replyToId, null, ct);
+    }
+
+    /// <summary>A message with 1-10 files uploaded earlier through <c>POST /media</c>, and an optional caption.</summary>
+    public async Task<MessageDto> SendMedia(Guid conversationId, Guid clientMsgId, string? caption, List<Guid>? mediaIds, Guid? replyToId)
+    {
+        var ct = Context.ConnectionAborted;
+        Fail(await validator.CheckCallerAsync(Context.User!, ct));
+        var files = await validator.CheckSendMediaAsync(Context.User!, conversationId, clientMsgId, caption, replyToId, mediaIds, ct);
+        Fail(files.Error);
+        return await StoreAndDeliver(conversationId, clientMsgId, CommandValidator.NormalizeBody(caption, options.Value.MaxBodyLength), replyToId, files.Value, ct);
+    }
+
+    private async Task<MessageDto> StoreAndDeliver(
+        Guid conversationId, Guid clientMsgId, string? body, Guid? replyToId, IReadOnlyList<Chat.Data.Entities.Media>? files, CancellationToken ct)
+    {
         if (!limiter.TryAcquire(Context.User!.UserId())) Fail(AuthError.RateLimited);
 
-        var result = await writer.SendAsync(
-            Context.User!.UserId(), conversationId, clientMsgId,
-            CommandValidator.NormalizeBody(body, options.Value.MaxBodyLength)!, replyToId, ct);
+        var result = await writer.SendAsync(Context.User!.UserId(), conversationId, clientMsgId, body, replyToId, files, ct);
         Fail(result.Error);
         if (result.Value!.Created)
         {

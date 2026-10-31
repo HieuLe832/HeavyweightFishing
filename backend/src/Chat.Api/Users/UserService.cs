@@ -47,7 +47,7 @@ public class UserService(ChatDbContext db, UserAccess access, TimeProvider time)
     private System.Linq.Expressions.Expression<Func<User, UserProfile>> Profile(Guid viewerId) => u => new UserProfile(
         u.Id, u.Username, u.DisplayName,
         db.Contacts.Any(c => c.OwnerId == viewerId && c.ContactId == u.Id),
-        db.Blocks.Any(b => b.BlockerId == viewerId && b.BlockedId == u.Id));
+        db.Blocks.Any(b => b.BlockerId == viewerId && b.BlockedId == u.Id), u.AvatarMediaId);
 
     private static string Escape(string s) => s.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
 }

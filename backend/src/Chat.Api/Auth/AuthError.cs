@@ -26,6 +26,10 @@ public record AuthError(int Status, string Code, string Title)
     public static readonly AuthError RateLimited = new(429, "rate_limited", "You are sending too fast. Slow down.");
     public static readonly AuthError UnsupportedType = new(400, "unsupported_type", "That kind of message is not supported yet.");
     public static readonly AuthError Invalid = new(400, "validation_failed", "That message is not valid.");
+    public static readonly AuthError FileTooLarge = new(413, "file_too_large", "That file is too large.");
+    public static readonly AuthError UnsupportedMediaType = new(415, "unsupported_media_type", "That kind of file is not allowed.");
+    public static readonly AuthError MediaNotFound = new(404, "media_not_found", "No such file.");
+    public static readonly AuthError InvalidAttachment = new(400, "invalid_attachment", "One of the attachments cannot be used.");
     public static readonly AuthError SelfTarget = new(400, "invalid_target", "You cannot do that to yourself.");
 }
 

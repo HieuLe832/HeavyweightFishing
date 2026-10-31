@@ -39,7 +39,36 @@ public class CommandValidator(ChatDbContext db, ConversationReader reader, UserA
     {
         if (clientMsgId == Guid.Empty || NormalizeBody(body, options.Value.MaxBodyLength) is null) return AuthError.Invalid;
 
-        var member = await CheckMemberAsync(caller.UserId(), conversationId, ct);
+        return await CheckDestinationAsync(caller.UserId(), conversationId, replyToId, ct);
+    }
+
+    /// <summary>
+    /// A message with files. The caption is optional; 1-10 distinct files, each ready and uploaded by the caller. A file that
+    /// is missing, someone else's or not ready is <c>invalid_attachment</c> in every case, so ids cannot be probed.
+    /// Returns the files in the order given.
+    /// </summary>
+    public async Task<Result<List<Media>>> CheckSendMediaAsync(
+        ClaimsPrincipal caller, Guid conversationId, Guid clientMsgId, string? caption, Guid? replyToId,
+        IReadOnlyList<Guid>? mediaIds, CancellationToken ct)
+    {
+        var o = options.Value;
+        if (clientMsgId == Guid.Empty || mediaIds is null || mediaIds.Count == 0 || mediaIds.Count > o.MaxAttachments
+            || mediaIds.Distinct().Count() != mediaIds.Count
+            || (!string.IsNullOrWhiteSpace(caption) && NormalizeBody(caption, o.MaxBodyLength) is null))
+            return AuthError.Invalid;
+
+        if (await CheckDestinationAsync(caller.UserId(), conversationId, replyToId, ct) is { } error) return error;
+
+        var userId = caller.UserId();
+        var found = await db.Media.AsNoTracking()
+            .Where(m => mediaIds.Contains(m.Id) && m.UploaderId == userId && m.Status == MediaStatus.Ready).ToListAsync(ct);
+        if (found.Count != mediaIds.Count) return AuthError.InvalidAttachment;
+        return mediaIds.Select(id => found.Single(m => m.Id == id)).ToList();
+    }
+
+    private async Task<AuthError?> CheckDestinationAsync(Guid userId, Guid conversationId, Guid? replyToId, CancellationToken ct)
+    {
+        var member = await CheckMemberAsync(userId, conversationId, ct);
         if (member.Error is not null) return member.Error;
 
         if (replyToId is { } reply && !await db.Messages.AnyAsync(m => m.Id == reply && m.ConversationId == conversationId, ct))

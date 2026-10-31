@@ -20,16 +20,35 @@ public record ReactionChange(Guid ConversationId, bool Changed);
 /// <summary>Process 4.2: the only writer of D6.</summary>
 public class MessageWriter(ChatDbContext db, TimeProvider time)
 {
-    public static MessageDto ToDto(Message m, IReadOnlyList<ReactionCount>? reactions = null) => new(
+    public static MessageDto ToDto(Message m, IReadOnlyList<ReactionCount>? reactions = null, IReadOnlyList<AttachmentDto>? attachments = null) => new(
         m.Id, m.ConversationId, m.Seq, m.SenderId, m.ClientMsgId, m.Type.ToString().ToLowerInvariant(), m.Body,
-        m.ReplyToId, m.CreatedAt, m.EditedAt, m.DeletedAt, reactions?.ToList() ?? []);
+        m.ReplyToId, m.CreatedAt, m.EditedAt, m.DeletedAt, reactions?.ToList() ?? [], m.DeletedAt is null ? attachments?.ToList() ?? [] : []);
+
+    public static AttachmentDto ToAttachment(Chat.Data.Entities.Media m) => new(m.Id, m.MimeType, m.SizeBytes, m.Width, m.Height);
+
+    /// <summary>The attachments of the given messages, in order. Deleted messages show none, so callers pass only live ids.</summary>
+    public static async Task<Dictionary<Guid, List<AttachmentDto>>> LoadAttachmentsAsync(ChatDbContext db, IReadOnlyCollection<Guid> messageIds, CancellationToken ct)
+    {
+        if (messageIds.Count == 0) return [];
+        var rows = await (
+            from a in db.MessageAttachments
+            join m in db.Media on a.MediaId equals m.Id
+            where messageIds.Contains(a.MessageId)
+            orderby a.MessageId, a.Position
+            select new { a.MessageId, Media = m }).AsNoTracking().ToListAsync(ct);
+        return rows.GroupBy(r => r.MessageId).ToDictionary(g => g.Key, g => g.Select(r => ToAttachment(r.Media)).ToList());
+    }
+
+    private async Task<List<AttachmentDto>> AttachmentsOfAsync(Message m, CancellationToken ct) =>
+        m.DeletedAt is not null ? [] : (await LoadAttachmentsAsync(db, [m.Id], ct)).GetValueOrDefault(m.Id) ?? [];
 
     /// <summary>
     /// Stores a text message. <c>seq</c> is taken under a lock on the conversation row (see docs/pitfalls.md), and a
     /// retry with the same <paramref name="clientMsgId"/> returns the original instead of storing a second copy.
     /// </summary>
     public async Task<Result<SendResult>> SendAsync(
-        Guid senderId, Guid conversationId, Guid clientMsgId, string body, Guid? replyToId, CancellationToken ct)
+        Guid senderId, Guid conversationId, Guid clientMsgId, string? body, Guid? replyToId,
+        IReadOnlyList<Chat.Data.Entities.Media>? attachments, CancellationToken ct)
     {
         if (await FindExistingAsync(senderId, conversationId, clientMsgId, ct) is { } existing) return existing;
 
@@ -47,9 +66,11 @@ public class MessageWriter(ChatDbContext db, TimeProvider time)
         var message = new Message
         {
             Id = Guid.NewGuid(), ConversationId = conversationId, Seq = conversation.LastSeq, SenderId = senderId,
-            ClientMsgId = clientMsgId, Type = MessageType.Text, Body = body, ReplyToId = replyToId, CreatedAt = now,
+            ClientMsgId = clientMsgId, Type = attachments is { Count: > 0 } ? MessageType.Media : MessageType.Text, Body = body, ReplyToId = replyToId, CreatedAt = now,
         };
         db.Messages.Add(message);
+        for (var i = 0; i < (attachments?.Count ?? 0); i++)
+            db.MessageAttachments.Add(new MessageAttachment { MessageId = message.Id, MediaId = attachments![i].Id, Position = (short)i });
 
         // The sender has read their own message; everyone else's cursors wait for 4.5.
         var member = await db.ConversationMembers.SingleAsync(m => m.ConversationId == conversationId && m.UserId == senderId, ct);
@@ -68,7 +89,7 @@ public class MessageWriter(ChatDbContext db, TimeProvider time)
             return found ?? Result<SendResult>.FromError(AuthError.Conflict);
         }
         await tx.CommitAsync(ct);
-        return new SendResult(ToDto(message), true);
+        return new SendResult(ToDto(message, null, attachments?.Select(ToAttachment).ToList()), true);
     }
 
     private static readonly JsonSerializerOptions NoticeJson = new(JsonSerializerDefaults.Web) { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
@@ -104,7 +125,7 @@ public class MessageWriter(ChatDbContext db, TimeProvider time)
         if (updated == 0) return AuthError.MessageDeleted;
 
         await db.Entry(message).ReloadAsync(ct);
-        return ToDto(message, await ReactionCountsAsync(message.Id, ct));
+        return ToDto(message, await ReactionCountsAsync(message.Id, ct), await AttachmentsOfAsync(message, ct));
     }
 
     /// <summary>
@@ -162,6 +183,8 @@ public class MessageWriter(ChatDbContext db, TimeProvider time)
     {
         var existing = await db.Messages.AsNoTracking().SingleOrDefaultAsync(m => m.SenderId == senderId && m.ClientMsgId == clientMsgId, ct);
         if (existing is null) return null;
-        return existing.ConversationId == conversationId ? new SendResult(ToDto(existing), false) : AuthError.Conflict;
+        return existing.ConversationId == conversationId
+            ? new SendResult(ToDto(existing, null, await AttachmentsOfAsync(existing, ct)), false)
+            : AuthError.Conflict;
     }
 }

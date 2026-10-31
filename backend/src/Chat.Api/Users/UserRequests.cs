@@ -4,7 +4,7 @@ public record UpdateProfileRequest(string? DisplayName);
 
 public record ContactRequest(string? Nickname);
 
-public record UserProfile(Guid Id, string Username, string DisplayName, bool IsContact, bool IsBlocked);
+public record UserProfile(Guid Id, string Username, string DisplayName, bool IsContact, bool IsBlocked, Guid? AvatarMediaId);
 
 public record ContactSummary(Guid UserId, string Username, string DisplayName, string? Nickname, DateTimeOffset CreatedAt);
 

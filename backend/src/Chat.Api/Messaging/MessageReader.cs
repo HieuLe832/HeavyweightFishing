@@ -1,6 +1,7 @@
 using Chat.Api.Auth;
 using Chat.Api.Conversations;
 using Chat.Data;
+using Chat.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace Chat.Api.Messaging;
@@ -40,6 +41,8 @@ public class MessageReader(ChatDbContext db, ConversationReader conversations)
             .ToListAsync(ct);
         var byMessage = counts.ToLookup(c => c.MessageId, c => new ReactionCount(c.Emoji, c.Count, c.Mine));
 
-        return new MessagePage(rows.Select(m => MessageWriter.ToDto(m, byMessage[m.Id].ToList())).ToList(), hasMore);
+        var attachments = await MessageWriter.LoadAttachmentsAsync(db, rows.Where(m => m.DeletedAt is null && m.Type == MessageType.Media).Select(m => m.Id).ToList(), ct);
+
+        return new MessagePage(rows.Select(m => MessageWriter.ToDto(m, byMessage[m.Id].ToList(), attachments.GetValueOrDefault(m.Id))).ToList(), hasMore);
     }
 }
