@@ -145,7 +145,7 @@ Design decisions worth knowing:
 
 ## API: auth
 
-Implements processes 1.1–1.5 and 1.7. 1.6 (Google) is not built yet. Design:
+Implements processes 1.1–1.5 and 1.7. 1.6 (Google) is skipped for now. Design:
 [specs/2026-10-31-auth-endpoints-design.md](superpowers/specs/2026-10-31-auth-endpoints-design.md).
 
 | Process | Endpoint | Notes |
@@ -161,6 +161,30 @@ Tokens: the access token is a 15-minute JWT (`sub`, `role`, `sid`). The refresh 
 30 days (sliding) and is stored as a SHA-256 hash. Errors are `application/problem+json` with a
 `code` field. Settings live under `Auth` and `Smtp` in `appsettings.json`; `Auth:JwtKey` and
 `Auth:CodeKey` have no default outside Development.
+
+## API: profile, contacts and blocking
+
+Implements process 2.0. Every endpoint needs a bearer token.
+
+| Endpoint | Notes |
+|----------|-------|
+| `PATCH /users/me` | Changes the display name (1-64 characters). Returns the same summary as `/auth/me` |
+| `GET /users/{id}` | Public profile: id, username, display name, `isContact`, `isBlocked`. Never the email |
+| `GET /users/search?q=&limit=` | Username prefix or display-name substring, case-insensitive. `q` is 2-64 characters, `limit` 1-50 (default 20) |
+| `GET /contacts` | Sorted by nickname, else display name |
+| `PUT /contacts/{id}` | Adds the contact or changes its nickname; the body is optional. Idempotent |
+| `DELETE /contacts/{id}` | Idempotent |
+| `GET /blocks`, `PUT /blocks/{id}`, `DELETE /blocks/{id}` | Blocking also removes the contact. Both calls are idempotent |
+
+Rules:
+
+- **A block hides you.** A user who blocked you looks exactly like a missing user (`404 user_not_found`)
+  in lookups, search, the contact list and when adding a contact, so a block does not tell the blocked person
+  where they stand. Someone *you* blocked gives `403 blocked` when you try to add them.
+- Banned and pending users are invisible to lookups and search. You can still list and remove a block on a
+  banned user.
+- Contacts are private and one-way: adding someone does not add you to their list.
+- Avatars are not here: they need media upload (5.0).
 
 ## Pitfalls
 

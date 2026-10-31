@@ -1,5 +1,6 @@
 using Chat.Api.Auth;
 using Chat.Api.Email;
+using Chat.Api.Users;
 using Chat.Data;
 using Chat.Data.Entities;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -27,6 +28,9 @@ builder.Services.ConfigureOptions<JwtBearerSetup>();
 builder.Services.AddAuthorizationBuilder()
     .AddPolicy(Policies.Admin, p => p.RequireRole(TokenService.RoleName(UserRole.Admin)));
 builder.Services.AddScoped<AccountService>();
+builder.Services.AddScoped<UserAccess>();
+builder.Services.AddScoped<UserService>();
+builder.Services.AddScoped<ContactService>();
 
 var app = builder.Build();
 
@@ -43,6 +47,7 @@ app.UseAuthorization();
 app.MapGet("/health", async (ChatDbContext db) =>
     await db.Database.CanConnectAsync() ? Results.Ok(new { status = "ok" }) : Results.StatusCode(503));
 app.MapAuth();
+app.MapUsers();
 
 app.Run();
 

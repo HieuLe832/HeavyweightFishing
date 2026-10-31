@@ -53,8 +53,10 @@ After changing entities, add a migration:
 
 ## Next steps
 
-1. Sign in with Google (1.6). Processes 1.1–1.5 and 1.7 are done: see "API: auth" in `docs/README.md`.
-2. Profile, contacts, blocking (2.0) and conversations (3.0).
-3. Messaging over WebSocket with SignalR, Redis and RabbitMQ (4.0).
-4. Media upload (5.0) and moderation (6.0).
-5. Chat UI with the game-inspired theme.
+1. Profile, contacts, blocking (2.0) and conversations (3.0).
+2. Messaging over WebSocket with SignalR, Redis and RabbitMQ (4.0).
+3. Media upload (5.0) and moderation (6.0).
+4. Chat UI with the game-inspired theme.
+
+Skipped for now: Sign in with Google (1.6). Processes 1.1–1.5 and 1.7 are done: see "API: auth" in
+`docs/README.md`.
