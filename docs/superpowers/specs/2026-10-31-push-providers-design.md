@@ -35,7 +35,9 @@ The API logs, per platform, which sender is active.
 
 **Web tokens.** The stored token has no whitespace and fits 4096 characters (`validation_failed` otherwise). A browser
 push subscription is JSON, so the client sends it as base64url of `{"endpoint","keys":{"p256dh","auth"}}`; the sender
-decodes it. A token that does not decode is `InvalidToken`.
+decodes it. A token that does not decode is `InvalidToken`, and so is one whose endpoint is not `https` on a public address (the API POSTs
+to that URL, so loopback, private and link-local literals and `localhost` are refused; a hostname that resolves to a private
+address is not checked).
 
 **Payload.** All three carry the `PushMessage` fields: title, body, and `conversationId`, `messageId`, `seq` as string data
 so the app can open the chat. FCM: a notification plus data; APNs: `aps.alert` with `thread-id` = conversation id, plus the

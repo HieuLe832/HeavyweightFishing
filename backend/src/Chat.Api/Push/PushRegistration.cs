@@ -67,7 +67,24 @@ public static class PushRegistration
     {
         if (!options.IsEmpty && options.Missing() is { Count: > 0 } missing)
             throw new InvalidOperationException($"Push:Web is partly configured; missing {string.Join(", ", missing)}.");
-        AddLogging(services, PushPlatform.Web);
+        if (options.IsEmpty)
+        {
+            AddLogging(services, PushPlatform.Web);
+            return;
+        }
+        if (!options.Subject!.StartsWith("mailto:", StringComparison.Ordinal) && !options.Subject.StartsWith("https://", StringComparison.Ordinal))
+            throw new InvalidOperationException("Push:Web:Subject must be a mailto: or https:// address.");
+        try
+        {
+            using var vapid = new Lib.Net.Http.WebPush.Authentication.VapidAuthentication(options.PublicKey!, options.PrivateKey!) { Subject = options.Subject };
+            vapid.GetVapidSchemeAuthenticationHeaderValueParameter("https://push.example.test/probe"); // signs once, so a bad key fails here
+        }
+        catch (Exception e) when (e is ArgumentException or FormatException or System.Security.Cryptography.CryptographicException)
+        {
+            throw new InvalidOperationException($"Push:Web:PublicKey or Push:Web:PrivateKey is not a valid VAPID key: {e.Message}", e);
+        }
+        services.AddHttpClient("webpush");
+        services.AddSingleton<IPushSender>(sp => new WebPushSender(new Lib.Net.Http.WebPush.PushServiceClient(sp.GetRequiredService<IHttpClientFactory>().CreateClient("webpush")), options));
     }
 
     private static void AddLogging(IServiceCollection services, PushPlatform platform) =>
