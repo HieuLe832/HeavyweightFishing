@@ -96,9 +96,14 @@ public class MessageWriter(ChatDbContext db, TimeProvider time)
     public async Task<Result<MessageDto>> EditAsync(Message message, string body, CancellationToken ct)
     {
         if (message.DeletedAt is not null) return AuthError.MessageDeleted;
-        message.Body = body;
-        message.EditedAt = time.GetUtcNow();
-        await db.SaveChangesAsync(ct);
+
+        // A delete may have committed since the message was loaded; the condition keeps deleted text from coming back.
+        var now = time.GetUtcNow();
+        var updated = await db.Messages.Where(m => m.Id == message.Id && m.DeletedAt == null)
+            .ExecuteUpdateAsync(u => u.SetProperty(m => m.Body, body).SetProperty(m => m.EditedAt, now), ct);
+        if (updated == 0) return AuthError.MessageDeleted;
+
+        await db.Entry(message).ReloadAsync(ct);
         return ToDto(message, await ReactionCountsAsync(message.Id, ct));
     }
 

@@ -1,8 +1,11 @@
 using System.Text.Json;
+using Chat.Api.Auth;
+using Chat.Api.Messaging;
 using Chat.Data;
 using Chat.Data.Entities;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using static Chat.Api.Tests.HubTestHelpers;
 using static Chat.Api.Tests.SendMessageTests;
 using static Chat.Api.Tests.TestHelpers;
@@ -150,5 +153,22 @@ public class EditDeleteTests(ApiFixture api) : IClassFixture<ApiFixture>
         for (var i = 0; i < 19; i++) await SendAsync(aliceHub, chat, $"m{i}");
 
         for (var i = 0; i < 5; i++) await EditAsync(aliceHub, id, $"v{i}");
+    }
+
+    [Fact]
+    public async Task An_edit_that_loses_a_race_with_a_delete_cannot_bring_the_text_back()
+    {
+        var (alice, _, _, aliceHub, _, id) = await ArrangeAsync();
+        await using var scope = api.Services.CreateAsyncScope();
+        var validator = scope.ServiceProvider.GetRequiredService<CommandValidator>();
+        var writer = scope.ServiceProvider.GetRequiredService<MessageWriter>();
+        var stale = (await validator.CheckMessageAsync(alice.Id, id, senderOnly: true, default)).Value!; // loaded before the delete
+        await DeleteAsync(aliceHub, id);
+
+        var result = await writer.EditAsync(stale, "resurrected", default);
+
+        Assert.Equal(AuthError.MessageDeleted, result.Error);
+        var row = await api.WithDbAsync(db => db.Messages.AsNoTracking().SingleAsync(m => m.Id == id));
+        Assert.Null(row.Body);
     }
 }
