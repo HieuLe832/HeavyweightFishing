@@ -113,7 +113,7 @@ Banning a user in 6.0 revokes their sessions in D2, so both 1.5 and 1.7 reject t
 | Sub-process | Does |
 |-------------|------|
 | 6.1 Submit Report | Any signed-in user reports a user or message. Checks the reporter is a member of that message's conversation, then stores the report with a snapshot of the message as evidence |
-| 6.2 Review Reports | Lists open reports with their evidence and the users involved. Every view of evidence is sent to 6.3, because admins are reading private messages |
+| 6.2 Review Reports | Lists reports (a queue) and shows one with its evidence and the users involved. The list leaves evidence out; every view of evidence is sent to 6.3, because admins are reading private messages |
 | 6.3 Record Audit Entry | The only writer of the audit log. It records who did what to which target; entries are never updated or deleted |
 | 6.4 Apply Moderation Decision | Bans or unbans a user and actions or dismisses a report. A ban sets the account status and revokes every session, so the user is signed out everywhere at once |
 | 6.5 Query Audit Log | Lets admins search the audit log by actor, action and date |
@@ -361,6 +361,37 @@ Process 5.0 and the attachment checks of 4.1. Bytes live in the object store (D7
   old file in the store. `avatarMediaId` appears in profiles, conversation summaries, `peer` and member lists.
 - **Object store.** `ObjectStore:Endpoint` (with `AccessKey`, `SecretKey`, `Bucket`) selects the S3 store (RustFS in Compose,
   bucket created on first use); without it files are kept in memory and the API warns at start.
+
+## API: moderation
+
+Process 6.0. Anyone can report; everything under `/admin` is for admins. There is no admin bootstrap: promote an account with
+`UPDATE users SET role = 'admin' WHERE username = '…'` and have it sign in again (the role is in the token).
+
+| Route | Does |
+|-------|------|
+| `POST /reports` `{ messageId?, targetUserId?, reason, details? }` | 6.1. `reason` is `spam`, `harassment` or `other`; `details` at most 1000 characters. `201 { id, status, createdAt }`, or `200` with the existing report when the caller already has an open one about the same message (or user) |
+| `GET /admin/reports?status=&limit=&after=` | 6.2. A queue, oldest first; `status` `open` (default), `actioned`, `dismissed` or `all`; `limit` 1-50; `after` is the last report id. No evidence |
+| `GET /admin/reports/{id}` | 6.2. The report with its `evidence`. **Every call writes an audit entry** |
+| `POST /admin/reports/{id}/resolve` `{ decision: "action" \| "dismiss", ban? }` | 6.4. Open reports only (`report_resolved`); `ban: true` (with `action`) also bans the target in the same transaction |
+| `POST /admin/users/{id}/ban` `{ reason? }`, `POST /admin/users/{id}/unban` | 6.4 |
+| `GET /admin/audit?actorId=&action=&from=&to=&limit=&before=` | 6.5. Newest first, `limit` 1-100, `before` is the last entry id |
+
+- **Reporting a message:** the caller must be an active member of its conversation (else `message_not_found`); blocks do not matter, so
+  someone who blocked an abuser can still report them. Not your own message (`invalid_target`), no system notices, not a deleted message
+  (`message_deleted`). The report stores a JSON snapshot (message, attachment metadata, conversation) as evidence, which survives the
+  message being deleted. Reporting a user needs a user the caller can see (a user who blocked the caller looks missing). 10 reports per
+  hour per user.
+- **Bans.** `banned` status plus every unrevoked session revoked (`revoke_reason = banned`), so tokens and refresh stop at once and
+  sign-in answers `account_banned`. Live events also stop at once: `MessageBroadcaster` only delivers to active accounts, on every
+  node, and the hub's per-command check refuses sends. You cannot ban yourself or another admin (`forbidden_target`). Banning twice is a
+  no-op. Unban restores `active`, or `pending` if the email was never verified.
+- **Admin check.** The JWT policy plus a database re-check on every call (`admin_only`), because a demoted admin's token stays valid
+  until it expires.
+- **Audit log.** Written only by `AuditWriter`, in the same transaction as the action, and stamped by the database clock. Actions:
+  `report.view_evidence`, `report.action`, `report.dismiss`, `user.ban`, `user.unban`. Entries carry actor, target, metadata and IP,
+  and cannot be changed or deleted.
+- **Known gap in the diagrams:** reporting a user without a message also reads D1 and the block list (D4) in 6.1; the 6.0 diagram does
+  not draw those two flows.
 
 ## Pitfalls
 

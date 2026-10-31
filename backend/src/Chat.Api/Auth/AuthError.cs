@@ -30,6 +30,10 @@ public record AuthError(int Status, string Code, string Title)
     public static readonly AuthError UnsupportedMediaType = new(415, "unsupported_media_type", "That kind of file is not allowed.");
     public static readonly AuthError MediaNotFound = new(404, "media_not_found", "No such file.");
     public static readonly AuthError InvalidAttachment = new(400, "invalid_attachment", "One of the attachments cannot be used.");
+    public static readonly AuthError ReportNotFound = new(404, "report_not_found", "No such report.");
+    public static readonly AuthError ReportResolved = new(409, "report_resolved", "That report has already been decided.");
+    public static readonly AuthError ForbiddenTarget = new(403, "forbidden_target", "You cannot do that to this account.");
+    public static readonly AuthError AdminOnly = new(403, "admin_only", "Only admins can do that.");
     public static readonly AuthError SelfTarget = new(400, "invalid_target", "You cannot do that to yourself.");
 }
 

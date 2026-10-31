@@ -3,6 +3,7 @@ using Chat.Api.Conversations;
 using Chat.Api.Email;
 using Chat.Api.Files;
 using Chat.Api.Messaging;
+using Chat.Api.Moderation;
 using Chat.Api.Push;
 using Chat.Api.Realtime;
 using Chat.Api.Users;
@@ -75,6 +76,12 @@ else
 }
 builder.Services.AddSingleton<UploadRateLimiter>();
 builder.Services.AddScoped<MediaService>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddOptions<ModerationOptions>().BindConfiguration(ModerationOptions.Section);
+builder.Services.AddSingleton<ReportRateLimiter>();
+builder.Services.AddScoped<AuditWriter>();
+builder.Services.AddScoped<ReportService>();
+builder.Services.AddScoped<ModerationService>();
 builder.Services.AddSingleton<ConnectionRegistry>();
 builder.Services.AddSingleton<PresenceService>();
 builder.Services.AddHostedService<PresenceRefresher>();
@@ -133,6 +140,7 @@ app.MapHistory();
 app.MapPresence();
 app.MapPush();
 app.MapMedia();
+app.MapModeration();
 app.MapHub<ChatHub>("/hubs/chat");
 
 app.Run();

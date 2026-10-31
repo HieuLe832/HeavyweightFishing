@@ -13,6 +13,7 @@ public static class RevokeReasons
     public const string RefreshReuse = "refresh_reuse";
     public const string UserInactive = "user_inactive";
     public const string PasswordReset = "password_reset";
+    public const string Banned = "banned";
 }
 
 public record ClientInfo(string UserAgent, IPAddress IpAddress);

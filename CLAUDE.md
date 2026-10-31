@@ -37,7 +37,7 @@ A chat app whose frontend look is derived from the Vietnamese fishing game *Câu
 
 ```bash
 docker compose up -d --wait                     # infrastructure
-cd backend && dotnet test                       # schema and API tests (start their own PostgreSQL via Docker)
+cd backend && dotnet test                       # schema and API tests (start their own PostgreSQL, Redis, RabbitMQ and RustFS via Docker)
 cd backend && dotnet run --project src/Chat.Api # API, applies migrations in Development
 cd frontend && npm install && npm run dev
 ```
@@ -53,11 +53,12 @@ After changing entities, add a migration:
 
 ## Next steps
 
-1. Messaging, next slices (4.0). Slice 2: Redis backplane and presence (D9), RabbitMQ fan-out, and 4.5 receipts /
-   typing / presence. Slice 3: 4.4 push notifications.
-2. Media upload (5.0) and moderation (6.0).
-3. Chat UI with the game-inspired theme.
+1. Chat UI with the game-inspired theme (`frontend/`).
+2. Push provider adapters: only a logging `IPushSender` ships. FCM, APNs and Web Push need operator credentials and drop in as
+   `IPushSender` registrations (see "API: push" in `docs/README.md`).
+3. Smaller follow-ups: a job that deletes object-store bytes of deleted or replaced media; redraw the 6.0 diagram to show 6.1
+   reading D1 and the block list (D4) for user reports.
 
-Skipped for now: Sign in with Google (1.6). Done: processes 1.1–1.5, 1.7, 2.0 and 3.0, and the first slice of 4.0
-(4.1, 4.2, 4.6 and a single-node 4.3: send, edit, delete, react, history, system notices); see the "API: …" sections
-in `docs/README.md`.
+Skipped for now: Sign in with Google (1.6). Done: every backend process except 1.6 and the push providers: 1.1-1.5, 1.7, 2.0, 3.0,
+4.0 (4.1-4.6, with the Redis backplane, presence, RabbitMQ hand-off, receipts and typing), 5.0 (upload, attachments, avatars)
+and 6.0 (reports, bans, audit log); see the "API: …" sections in `docs/README.md`. Design specs are in `docs/superpowers/specs/`.

@@ -33,8 +33,8 @@ Things that look fine and break later. Many are pinned by tests in
 ## Auth and moderation
 
 - **A ban must revoke every session.** Setting `users.status = banned` is not enough; 6.4 also revokes
-  all rows in `sessions`, otherwise a banned user keeps a valid access token until it expires. *(Not
-  built yet.)*
+  all rows in `sessions`, otherwise a banned user keeps a valid access token until it expires.
+  `ModerationService.BanCoreAsync` does both in one transaction.
 - **Refresh-token reuse revokes the session.** A token with `used_at` set that is presented again means
   theft; revoke the whole session, not just that token. `SignInService.RefreshAsync` does this.
 - **Refresh calls from one client must not overlap.** Two parallel refreshes with the same token look like
@@ -104,6 +104,20 @@ Things that look fine and break later. Many are pinned by tests in
 - **A push preview leaves the system.** The text goes to FCM / APNs / Web Push. Do not add more than the 100-character preview, and
   do not log it.
 - **The per-user rate limiters are per node.** With several nodes the real limit is the limit times the node count.
+
+## Moderation
+
+- **A ban must also stop live events.** An open socket outlives its token, and fan-out goes by user id, so `MessageBroadcaster` only
+  sends to members whose account is `active`. Keep that join when changing it.
+- **Reports must work through a block.** 6.1 checks membership only. Do not reuse `CommandValidator.CheckMemberAsync` for it: it refuses a
+  blocker in a blocked direct chat, and that is exactly who needs to report.
+- **Evidence is read-audited.** Only `GET /admin/reports/{id}` returns evidence, and it writes `report.view_evidence`. Do not add a second
+  way to read evidence without the audit entry.
+- **Only `AuditWriter` inserts audit rows,** inside the caller's transaction. The log's time is the database's `now()`; the fake test
+  clock does not move it.
+- **Admin role is read from the database on every admin call.** A token's `role` claim can be minutes stale.
+- **A report is deduplicated by a query, not a constraint.** Two identical reports sent at the same instant can both be stored; there is
+  no unique index to stop it (that would be a schema change).
 
 ## Media
 

@@ -64,8 +64,9 @@ public class ReactionTests(ApiFixture api) : IClassFixture<ApiFixture>
     public async Task Reacting_off_removes_it_and_off_when_absent_sends_nothing()
     {
         var (_, _, _, aliceHub, bobHub, id) = await ArrangeAsync();
-        await ReactAsync(bobHub, id, Thumb);
         var aliceInbox = Inbox.Listen(aliceHub);
+        await ReactAsync(bobHub, id, Thumb);
+        Assert.True((await aliceInbox.Next("message.reaction")).GetProperty("on").GetBoolean()); // delivery is async: take it before the next step
 
         await ReactAsync(bobHub, id, Thumb, on: false);
         Assert.False((await aliceInbox.Next("message.reaction")).GetProperty("on").GetBoolean());

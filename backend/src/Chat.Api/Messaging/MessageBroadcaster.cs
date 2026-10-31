@@ -79,8 +79,12 @@ public class MessageBroadcaster(
         }
     }
 
+    /// <summary>Active members whose account is active: a banned user's open socket stops receiving at once, on every node.</summary>
     private Task<List<Guid>> MembersAsync(Guid conversationId, CancellationToken ct) =>
-        db.ConversationMembers.Where(m => m.ConversationId == conversationId && m.LeftAt == null).Select(m => m.UserId).ToListAsync(ct);
+        (from m in db.ConversationMembers
+         join u in db.Users on m.UserId equals u.Id
+         where m.ConversationId == conversationId && m.LeftAt == null && u.Status == UserStatus.Active
+         select m.UserId).ToListAsync(ct);
 
     private Task SendAsync(string eventName, object payload, IEnumerable<Guid> userIds, CancellationToken ct) =>
         hub.Clients.Users(userIds.Distinct().Select(id => id.ToString()).ToList()).SendAsync(eventName, payload, ct);
