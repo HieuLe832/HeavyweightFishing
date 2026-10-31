@@ -134,6 +134,7 @@ public class ApiFixture : IAsyncLifetime
             builder.UseSetting("ConnectionStrings:Chat", owner._connectionString);
             builder.UseSetting("Auth:JwtKey", "test-jwt-key-test-jwt-key-test-jwt-key-0123456789");
             builder.UseSetting("Auth:CodeKey", "test-code-key-0123456789");
+            builder.UseSetting("Media:Cleanup:Enabled", "false"); // tests run the cleanup themselves, on their clock
             foreach (var (key, value) in owner._settings) builder.UseSetting(key, value);
             builder.ConfigureTestServices(services =>
             {

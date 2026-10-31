@@ -13,7 +13,23 @@ public sealed class MediaCleanupService(
     IServiceScopeFactory scopes, IObjectStore store, IOptions<MediaCleanupOptions> options, TimeProvider time, ILogger<MediaCleanupService> log)
     : BackgroundService
 {
-    protected override Task ExecuteAsync(CancellationToken stoppingToken) => Task.CompletedTask;
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        if (!options.Value.Enabled) return;
+        using var timer = new PeriodicTimer(TimeSpan.FromMinutes(options.Value.IntervalMinutes), time);
+        while (await timer.WaitForNextTickAsync(stoppingToken))
+        {
+            try
+            {
+                var removed = await RunOnceAsync(stoppingToken);
+                if (removed > 0) log.LogInformation("Media cleanup removed {Count} unused files", removed);
+            }
+            catch (Exception e) when (!stoppingToken.IsCancellationRequested)
+            {
+                log.LogError(e, "Media cleanup failed; it will try again at the next tick");
+            }
+        }
+    }
 
     /// <summary>Runs batches until one comes back short. Returns how many media rows were removed.</summary>
     public async Task<int> RunOnceAsync(CancellationToken ct = default)

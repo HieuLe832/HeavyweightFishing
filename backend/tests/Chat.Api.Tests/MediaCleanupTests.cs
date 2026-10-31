@@ -252,6 +252,87 @@ public class MediaCleanupCountTests : IAsyncLifetime
         foreach (var id in ids) Assert.False(await _api.MediaExistsAsync(id));
     }
 
+    [Fact]
+    public async Task The_timer_removes_unused_files_when_enabled()
+    {
+        var media = (await UploadsAsync(1))[0];
+        _api.Age();
+        var service = _api.NewCleanup(new MediaCleanupOptions { Enabled = true, IntervalMinutes = 1 });
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            await WaitUntilAsync(async () => !await _api.MediaExistsAsync(media), tick: true);
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task A_disabled_service_never_runs()
+    {
+        var media = (await UploadsAsync(1))[0];
+        _api.Age();
+        var service = _api.NewCleanup(new MediaCleanupOptions { Enabled = false, IntervalMinutes = 1 });
+        await service.StartAsync(CancellationToken.None);
+        _api.Time.Advance(TimeSpan.FromMinutes(5));
+        await Task.Delay(500);
+        await service.StopAsync(CancellationToken.None);
+
+        Assert.True(await _api.MediaExistsAsync(media));
+    }
+
+    [Fact]
+    public async Task A_failing_tick_does_not_stop_the_loop()
+    {
+        var media = (await UploadsAsync(1))[0];
+        _api.Age();
+        var failing = new FailOnceObjectStore(_api.Services.GetRequiredService<InMemoryObjectStore>());
+        var service = _api.NewCleanup(new MediaCleanupOptions { Enabled = true, IntervalMinutes = 1, BatchSize = 1 }, failing);
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            // The first tick throws while listing; the second must still run.
+            failing.Armed = true;
+            await WaitUntilAsync(() => Task.FromResult(failing.Failures >= 1), tick: true);
+            failing.Armed = false;
+            await WaitUntilAsync(async () => !await _api.MediaExistsAsync(media), tick: true);
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
+    /// <summary>The service starts its timer a moment after StartAsync returns, so with <paramref name="tick"/> the clock keeps advancing a minute at a time.</summary>
+    private async Task WaitUntilAsync(Func<Task<bool>> condition, bool tick = false)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (!await condition())
+        {
+            Assert.True(DateTime.UtcNow < deadline, "condition not met within 5 seconds");
+            if (tick) _api.Time.Advance(TimeSpan.FromMinutes(1));
+            await Task.Delay(25);
+        }
+    }
+
+    private sealed class FailOnceObjectStore(IObjectStore inner) : IObjectStore
+    {
+        public bool Armed { get; set; }
+        public int Failures { get; private set; }
+
+        public Task PutAsync(string key, byte[] content, string contentType, CancellationToken ct) => inner.PutAsync(key, content, contentType, ct);
+        public Task<byte[]?> GetAsync(string key, CancellationToken ct) => inner.GetAsync(key, ct);
+
+        public Task DeleteAsync(string key, CancellationToken ct)
+        {
+            if (!Armed) return inner.DeleteAsync(key, ct);
+            Failures++;
+            throw new OperationCanceledException("not the caller's token"); // escapes the per-key catch, like a broken tick
+        }
+    }
+
     private sealed class ThrowingObjectStore(IObjectStore inner, string failingKey) : IObjectStore
     {
         public Task PutAsync(string key, byte[] content, string contentType, CancellationToken ct) => inner.PutAsync(key, content, contentType, ct);

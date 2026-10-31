@@ -74,6 +74,8 @@ else
     builder.Services.AddSingleton<InMemoryObjectStore>();
     builder.Services.AddSingleton<IObjectStore>(sp => sp.GetRequiredService<InMemoryObjectStore>());
 }
+builder.Services.AddOptions<MediaCleanupOptions>().BindConfiguration(MediaCleanupOptions.Section);
+builder.Services.AddHostedService<MediaCleanupService>();
 builder.Services.AddSingleton<UploadRateLimiter>();
 builder.Services.AddScoped<MediaService>();
 builder.Services.AddHttpContextAccessor();
