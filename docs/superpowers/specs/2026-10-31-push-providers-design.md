@@ -16,8 +16,9 @@ against fake HTTP servers and fixed vectors. The README says so.
 
 ## Decisions
 
-**Dependencies.** FCM through `FirebaseAdmin` (handles the OAuth token for a service account). Web Push through the
-`WebPush` package (VAPID signing and RFC 8291 encryption are easy to get wrong by hand). APNs by hand over `HttpClient`
+**Dependencies.** FCM by hand over `HttpClient` against the HTTP v1 API, with `Google.Apis.Auth` only to turn the service
+account file into access tokens (the Firebase Admin SDK's exceptions cannot be built in tests, so its error mapping could not
+be tested). Web Push through the `WebPush` package (VAPID signing and RFC 8291 encryption are easy to get wrong by hand). APNs by hand over `HttpClient`
 on HTTP/2 with an ES256 provider token: the key is a `.p8` file, the JWT is 20 lines with `ECDsa`, and the available
 packages are unmaintained. Exact package versions are checked when the plan is written.
 
@@ -45,7 +46,7 @@ throws, which the dispatcher logs and skips.
 
 | Provider answer | Result |
 |-----------------|--------|
-| FCM `UNREGISTERED`, `INVALID_ARGUMENT` on the token | `InvalidToken` |
+| FCM 404 `UNREGISTERED`, or 400 `INVALID_ARGUMENT` whose message mentions the token | `InvalidToken` |
 | APNs 410, or 400 `BadDeviceToken` / `Unregistered` | `InvalidToken` |
 | Web Push 404 or 410 | `InvalidToken` |
 | 2xx | `Sent` |
@@ -70,7 +71,7 @@ warning moves into it and names only the platforms that fell back.
 - options: complete, empty and half-filled sections; the registration picks real or logging per platform;
 - APNs: JWT header and claims, caching and renewal, request path, headers (`apns-topic`, `apns-push-type`, `apns-priority`),
   body, and every row of the result table, against a fake HTTP/2 handler;
-- FCM: message mapping and the `FirebaseMessagingException` codes, through an `IFirebaseMessagingClient` seam over the SDK;
+- FCM: request URL (project id from the service account), bearer token from an `IAccessTokenProvider` seam, body, and every row of the result table, against a fake `HttpMessageHandler`;
 - Web: base64url decoding (valid, garbage, wrong shape), 404 / 410 mapping, through a fake `HttpMessageHandler`;
 - the dispatcher still clears a token on `InvalidToken` (existing test) with each real sender replaced by a fake.
 
