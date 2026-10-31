@@ -19,6 +19,11 @@ const withConvs = (...convs: ConversationSummary[]) => run(initialState, { type:
 const seqs = (state: ChatState, id: string) => (state.messages[id] ?? []).map((m) => m.seq);
 
 describe("conversations", () => {
+  it("know whether the list has been loaded yet", () => {
+    expect(initialState.listLoaded).toBe(false);
+    expect(withConvs().listLoaded).toBe(true);
+  });
+
   it("are ordered by latest activity", () => {
     const state = withConvs(conv("a", { updatedAt: "2026-01-01T00:00:00Z" }), conv("b", { updatedAt: "2026-01-02T00:00:00Z" }));
 

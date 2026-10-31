@@ -13,6 +13,8 @@ export interface ChatState {
   hasMoreOlder: Record<string, boolean>;
   openId: string | null;
   status: ConnectionStatus;
+  /** True once the list has been fetched, so an empty list can be told from one still loading. */
+  listLoaded: boolean;
   /** An event arrived for a conversation the list does not have: refetch the list. */
   missingConversation: boolean;
 }
@@ -24,6 +26,7 @@ export const initialState: ChatState = {
   hasMoreOlder: {},
   openId: null,
   status: "disconnected",
+  listLoaded: false,
   missingConversation: false,
 };
 
@@ -89,7 +92,7 @@ function setUnread(state: ChatState, conversationId: string, unread: number): Ch
 function mergeConversations(state: ChatState, incoming: ConversationSummary[], replace: boolean): ChatState {
   const conversations = replace ? {} : { ...state.conversations };
   for (const c of incoming) conversations[c.id] = c.id === state.openId ? { ...c, unread: 0 } : c;
-  return { ...state, conversations, order: Object.keys(conversations).sort(byActivity(conversations)), missingConversation: false };
+  return { ...state, conversations, order: Object.keys(conversations).sort(byActivity(conversations)), listLoaded: true, missingConversation: false };
 }
 
 export function reducer(state: ChatState, action: Action): ChatState {

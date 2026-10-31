@@ -75,6 +75,8 @@ export interface Api {
   logout(): Promise<void>;
   me(): Promise<User>;
   refresh(): Promise<void>;
+  /** The access token now in use, for the SignalR connection (which sends it in the query string). */
+  accessToken(): string | null;
 }
 
 /** Calls that must never trigger a token refresh: they run without a session, or are the refresh itself. */
@@ -174,5 +176,6 @@ export function createApi({ baseUrl, tokens, fetch: fetchFn = (...args) => fetch
     },
     me: () => request<User>("GET", "/auth/me"),
     refresh,
+    accessToken: () => tokens.getAccess(),
   };
 }

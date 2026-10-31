@@ -200,6 +200,17 @@ describe("auth calls", () => {
   });
 });
 
+describe("accessToken", () => {
+  it("is the token in the store now, including after a refresh", async () => {
+    const { api } = setup((url) => (url.endsWith("/auth/refresh") ? json(200, auth(2)) : json(200, {})));
+    expect(api.accessToken()).toBe("access-1");
+
+    await api.refresh();
+
+    expect(api.accessToken()).toBe("access-2");
+  });
+});
+
 describe("createLocalTokenStore", () => {
   beforeEach(() => localStorage.clear());
 
