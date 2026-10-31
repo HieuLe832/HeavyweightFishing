@@ -28,6 +28,22 @@ public class UserAccess(ChatDbContext db)
         return await HasBlockedAsync(viewerId, targetId, ct) ? AuthError.Blocked : result;
     }
 
+    /// <summary>
+    /// <see cref="FindReachableAsync"/> for several users at once. All or nothing: the first problem found is
+    /// the answer, and users who blocked the viewer count as missing.
+    /// </summary>
+    public async Task<Result<List<User>>> FindReachableManyAsync(Guid viewerId, IReadOnlyCollection<Guid> ids, CancellationToken ct)
+    {
+        if (ids.Contains(viewerId)) return AuthError.SelfTarget;
+        var users = await db.Users.Where(u => ids.Contains(u.Id) && u.Status == UserStatus.Active).ToListAsync(ct);
+        if (users.Count != ids.Count) return AuthError.UserNotFound;
+
+        var blockedViewer = await db.Blocks.AnyAsync(b => ids.Contains(b.BlockerId) && b.BlockedId == viewerId, ct);
+        if (blockedViewer) return AuthError.UserNotFound;
+        var viewerBlocked = await db.Blocks.AnyAsync(b => b.BlockerId == viewerId && ids.Contains(b.BlockedId), ct);
+        return viewerBlocked ? AuthError.Blocked : users;
+    }
+
     public Task<bool> HasBlockedAsync(Guid blockerId, Guid blockedId, CancellationToken ct) =>
         db.Blocks.AnyAsync(b => b.BlockerId == blockerId && b.BlockedId == blockedId, ct);
 }

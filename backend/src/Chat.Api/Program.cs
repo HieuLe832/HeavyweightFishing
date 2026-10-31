@@ -1,4 +1,5 @@
 using Chat.Api.Auth;
+using Chat.Api.Conversations;
 using Chat.Api.Email;
 using Chat.Api.Users;
 using Chat.Data;
@@ -31,6 +32,9 @@ builder.Services.AddScoped<AccountService>();
 builder.Services.AddScoped<UserAccess>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<ContactService>();
+builder.Services.AddScoped<ConversationReader>();
+builder.Services.AddScoped<ConversationService>();
+builder.Services.AddScoped<GroupService>();
 
 var app = builder.Build();
 
@@ -48,6 +52,7 @@ app.MapGet("/health", async (ChatDbContext db) =>
     await db.Database.CanConnectAsync() ? Results.Ok(new { status = "ok" }) : Results.StatusCode(503));
 app.MapAuth();
 app.MapUsers();
+app.MapConversations();
 
 app.Run();
 

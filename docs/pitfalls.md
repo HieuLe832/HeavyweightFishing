@@ -50,6 +50,21 @@ Things that look fine and break later. Many are pinned by tests in
 - **Access-token expiry follows `TimeProvider`.** The default JwtBearer lifetime check reads the system
   clock, so `JwtBearerSetup` supplies its own validator. Keep it if tests move the fake clock.
 
+## Conversations and contacts
+
+- **A block must look like a missing user.** `UserAccess` answers `user_not_found` for a user who blocked the
+  viewer, in lookups, search, contacts, direct chats and group adds. A distinct error would tell the blocked
+  person they were blocked. Only the blocker themselves sees `blocked`.
+- **Group changes lock the conversation row.** `GroupService.MutateAsync` runs `SELECT ... FOR UPDATE` on the
+  `conversations` row first. Without it, the owner and the only admin leaving at the same moment can leave the
+  group with no owner. New group operations go through `MutateAsync`.
+- **`direct_key` is lower-case `D`-format ids joined by `:`.** Build it with `ConversationService.DirectKey` only;
+  a differently formatted key makes a second chat for the same pair, since the unique index compares text.
+- **Leaving keeps the member row.** `left_at` is set, not the row deleted (messages and receipts refer to it).
+  Every read of members must filter `left_at IS NULL`; `ConversationReader` does.
+- **Blocking does not end existing chats.** It only stops new direct chats and group adds. Message delivery
+  between blocked users has to be refused in 4.1.
+
 ## Tooling
 
 - **Edit `.drawio` files, never the PNGs.** Regenerate the PNG after every diagram change (see

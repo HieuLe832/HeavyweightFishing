@@ -14,6 +14,12 @@ public record AuthError(int Status, string Code, string Title)
     // Not auth failures, but the API shares this error shape (ProblemDetails with a `code`).
     public static readonly AuthError UserNotFound = new(404, "user_not_found", "No such user.");
     public static readonly AuthError Blocked = new(403, "blocked", "You blocked this user. Unblock them first.");
+    public static readonly AuthError ConversationNotFound = new(404, "conversation_not_found", "No such conversation.");
+    public static readonly AuthError MemberNotFound = new(404, "member_not_found", "That user is not in this group.");
+    public static readonly AuthError NotAGroup = new(400, "not_a_group", "That only works in a group.");
+    public static readonly AuthError InsufficientRole = new(403, "insufficient_role", "Your role in this group does not allow that.");
+    public static readonly AuthError GroupFull = new(409, "group_full", "This group has reached its member limit.");
+    public static readonly AuthError Conflict = new(409, "conflict", "Something changed at the same time. Try again.");
     public static readonly AuthError SelfTarget = new(400, "invalid_target", "You cannot do that to yourself.");
 }
 

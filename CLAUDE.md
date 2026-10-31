@@ -53,10 +53,10 @@ After changing entities, add a migration:
 
 ## Next steps
 
-1. Profile, contacts, blocking (2.0) and conversations (3.0).
-2. Messaging over WebSocket with SignalR, Redis and RabbitMQ (4.0).
-3. Media upload (5.0) and moderation (6.0).
-4. Chat UI with the game-inspired theme.
+1. Messaging over WebSocket with SignalR, Redis and RabbitMQ (4.0). It must also write system notices for
+   3.0 (joined, left, renamed) and refuse messages between blocked users.
+2. Media upload (5.0) and moderation (6.0).
+3. Chat UI with the game-inspired theme.
 
-Skipped for now: Sign in with Google (1.6). Processes 1.1–1.5 and 1.7 are done: see "API: auth" in
-`docs/README.md`.
+Skipped for now: Sign in with Google (1.6). Done: processes 1.1–1.5, 1.7, 2.0 and 3.0; see the "API: …"
+sections in `docs/README.md`.

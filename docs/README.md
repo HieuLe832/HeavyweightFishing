@@ -186,6 +186,40 @@ Rules:
 - Contacts are private and one-way: adding someone does not add you to their list.
 - Avatars are not here: they need media upload (5.0).
 
+## API: conversations
+
+Implements process 3.0. Every endpoint needs a bearer token. A conversation you are not an active member of
+(never joined, removed, or left) answers `404 conversation_not_found`.
+
+| Endpoint | Notes |
+|----------|-------|
+| `GET /conversations?limit=&before=` | Your conversations, newest activity first. `limit` 1-100 (default 50); pass the last `updatedAt` as `before` for the next page |
+| `GET /conversations/{id}` | The conversation plus its active members |
+| `POST /conversations/direct` | `{ userId }`. `201` for a new chat, `200` for the one that already exists |
+| `POST /conversations/group` | `{ title, memberIds }`. The creator becomes owner. Title 1-100 characters, at least one other member |
+| `PATCH /conversations/{id}` | `{ title }`. Owner or admin |
+| `POST /conversations/{id}/members` | `{ userIds }`. Owner or admin. People already in are skipped |
+| `DELETE /conversations/{id}/members/{userId}` | Owner removes anyone; an admin removes plain members only |
+| `PUT /conversations/{id}/members/{userId}/role` | `{ role: "admin" \| "member" }`. Owner only, never for themselves |
+| `POST /conversations/{id}/leave` | Groups only |
+| `PUT /conversations/{id}/mute`, `DELETE /conversations/{id}/mute` | `{ until }` must be in the future. Per member; use a far date for "forever" |
+
+Rules:
+
+- **Direct chats** are keyed by the sorted pair of user ids (`direct_key`), so opening one from either side, or
+  from both at once, gives the same row. They have no title, cannot be renamed or left, and show the other
+  person as `peer`.
+- **Blocks** are checked when a direct chat is opened and when people are added to a group, in the same way
+  as for contacts: someone you blocked gives `403 blocked`, someone who blocked you looks like a missing user.
+  Existing conversations are not touched. Refusing to deliver messages between blocked users belongs to 4.1.
+- **Owners** leaving hand ownership to the longest-standing admin, else the longest-standing member. A group
+  where everyone left stays in the database, empty.
+- **Rejoining** gives a fresh member row state: role `member`, no mute, and read cursors at the current
+  `last_seq`, so nothing from before shows as unread.
+- A group holds at most 256 members.
+- `unread` is `last_seq - last_read_seq`. Nothing moves `last_read_seq` yet (that is 4.5), so it counts every message.
+- System notices ("Lan joined the group") are not written yet: they are messages, so they arrive with 4.0.
+
 ## Pitfalls
 
 Traps in the schema and the stack are listed in [pitfalls.md](pitfalls.md).
