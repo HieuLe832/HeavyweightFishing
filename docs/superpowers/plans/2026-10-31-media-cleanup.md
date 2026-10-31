@@ -1,8 +1,8 @@
-# Media Cleanup and 6.0 Diagram Implementation Plan
+# Media Cleanup Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** A background job deletes media rows and object-store bytes that nothing uses any more, and the 6.0 level-2 diagram shows 6.1 reading D1 and D4.
+**Goal:** A background job deletes media rows and object-store bytes that nothing uses any more, (the 6.0 diagram redraw is deferred and only recorded).
 
 **Architecture:** `MediaCleanupService` is a `BackgroundService` whose public `RunOnceAsync` claims unused `media` rows in one transaction (`FOR UPDATE SKIP LOCKED`), commits, then deletes their bytes. No schema or API change.
 
@@ -107,22 +107,20 @@ git add backend
 git commit -m "feat(api): run media cleanup periodically"
 ```
 
-### Task 3: Redraw the 6.0 diagram and update docs
+### Task 3: Docs (the diagram is deferred)
+
+The owner decided not to touch the diagrams in this work; a later review redraws them.
 
 **Files:**
-- Modify: `docs/diagrams/03c-dfd-level-2-moderation.drawio`, regenerate `03c-dfd-level-2-moderation.png`
-- Modify: `docs/README.md` (3c table row for 6.1; "API: media" gets one bullet about cleanup and its four settings)
-- Modify: `CLAUDE.md` ("Next steps": remove the smaller follow-ups item; add the cleanup job to the "Done" sentence)
+- Modify: `docs/README.md` ("API: media" gets one bullet about cleanup and its four settings)
+- Modify: `CLAUDE.md` ("Next steps": remove the "job that deletes object-store bytes" half of the follow-up item and add the cleanup job to the "Done" sentence; KEEP the diagram half as its own item: "Redraw `03c` so 6.1 reads D1 (`reported user`) and D4 (`block list`), add the matching words to the 6.1 row of the README 3c table, check `02` shows the same, regenerate PNGs. Deliberately not done yet.")
 
 **Interfaces:** none.
 
-- [ ] **Step 1: Add the flows in the `.drawio` XML.** Follow how `d1` / `d1_p62` (a duplicate-D1 store symbol with a flow into 6.2) are drawn: add a D1 symbol with a flow `reported user` into `p61`, and a D4 symbol "Contacts & Blocks" with a flow `block list` into `p61`. Use the existing ids' style (`d1b`, `d1b_n`, `d1b_d` pattern) with new ids `d1c*`, `d4*`, `d1c_p61`, `d4_p61`. Place them so no existing shape or label overlaps; keep light-mode colours. Check the ERD header colour for D4 in `04-erd.drawio` and match it.
-- [ ] **Step 2: Check balance with the level-1 diagram:** 6.0 already reads D1 and D4 there (open `02-dfd-level-1.drawio` and confirm; if it does not, add those flows there too and regenerate that PNG).
-- [ ] **Step 3: Regenerate PNGs.** Start `jgraph/drawio` in Docker on `127.0.0.1:18080`, run `node scripts/export-diagrams.mjs 03c` (Node >= 22), then stop the container. Open the PNG and confirm the two new flows are visible and nothing overlaps.
-- [ ] **Step 4: Edit README and CLAUDE.md** as listed. 6.1 row: add "and that the target is visible to them (D1) and not behind a block (D4)".
-- [ ] **Step 5: Commit**
+- [ ] **Step 1: Edit README and CLAUDE.md** as listed. Do not edit any `.drawio` or `.png` and do not change the 6.1 table row.
+- [ ] **Step 2: Commit**
 
 ```bash
 git add docs CLAUDE.md
-git commit -m "docs: 6.1 reads D1 and D4 in the 6.0 diagram; document media cleanup"
+git commit -m "docs: document media cleanup; record the pending 6.0 diagram redraw"
 ```

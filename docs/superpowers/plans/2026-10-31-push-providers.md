@@ -6,7 +6,7 @@
 
 **Architecture:** One `IPushSender` per platform in `Chat.Api/Push/`, each built on an injectable `HttpClient` (so a fake `HttpMessageHandler` tests them). `PushRegistration.AddPushSenders` reads the `Push` section and registers the real or the logging sender per platform. `PushDispatcher` is untouched.
 
-**Tech Stack:** .NET 10, `HttpClient`, `System.Security.Cryptography.ECDsa` (APNs JWT), `Google.Apis.Auth` (FCM access tokens), `WebPush` NuGet package (VAPID + RFC 8291). Resolve current versions with `dotnet add package`.
+**Tech Stack:** .NET 10, `HttpClient`, `System.Security.Cryptography.ECDsa` (APNs JWT), a hand-written service-account token provider (FCM access tokens, no Google package), `WebPush` NuGet package (VAPID + RFC 8291). Resolve current versions with `dotnet add package`.
 
 **Spec:** `docs/superpowers/specs/2026-10-31-push-providers-design.md`
 
@@ -101,21 +101,21 @@ git commit -m "feat(api): APNs push sender"
 ### Task 3: FCM sender
 
 **Files:**
-- Create: `backend/src/Chat.Api/Push/FcmPushSender.cs`, `backend/src/Chat.Api/Push/FcmCredentials.cs`
-- Modify: `backend/src/Chat.Api/Push/PushRegistration.cs`, `backend/src/Chat.Api/Chat.Api.csproj` (`Google.Apis.Auth`)
-- Test: `backend/tests/Chat.Api.Tests/FcmPushSenderTests.cs`
+- Create: `backend/src/Chat.Api/Push/FcmPushSender.cs`, `backend/src/Chat.Api/Push/ServiceAccountTokenProvider.cs`, `backend/src/Chat.Api/Push/FcmCredentials.cs`
+- Modify: `backend/src/Chat.Api/Push/PushRegistration.cs`
+- Test: `backend/tests/Chat.Api.Tests/FcmPushSenderTests.cs`, `backend/tests/Chat.Api.Tests/ServiceAccountTokenProviderTests.cs`
 
 **Interfaces:**
-- Produces: `public interface IAccessTokenProvider { Task<string> GetAsync(CancellationToken ct); }` with the real `GoogleAccessTokenProvider(string serviceAccountJsonPath)` (scope `https://www.googleapis.com/auth/firebase.messaging`, via `GoogleCredential.FromFile(path).CreateScoped(...)`). `FcmCredentials(string ProjectId)` is read from the file's `project_id`.
+- Produces: `public interface IAccessTokenProvider { Task<string> GetAsync(CancellationToken ct); }` with the real `ServiceAccountTokenProvider(HttpClient http, ServiceAccount account, TimeProvider time)`. `ServiceAccount(string ProjectId, string ClientEmail, string PrivateKeyPem, string TokenUri)` is read from the file by `ServiceAccount.Load(string path)` (`FcmCredentials` is replaced by it).
 - Consumes: `FakeHandler` (Task 2).
 
 - [ ] **Step 1: Write failing tests:**
   - `The_request_posts_to_the_project_send_url_with_a_bearer_token`: `https://fcm.googleapis.com/v1/projects/<id>/messages:send`, `Authorization: Bearer <fake token>`.
   - `The_body_has_token_notification_and_string_data` (Vietnamese text intact; `seq` is a string).
   - `Result_mapping` `[Theory]`: 200 → `Sent`; 404 with `{"error":{"status":"NOT_FOUND","details":[{"errorCode":"UNREGISTERED"}]}}` → `InvalidToken`; 400 `INVALID_ARGUMENT` with message `The registration token is not a valid FCM registration token` → `InvalidToken`; 400 `INVALID_ARGUMENT` with message `Invalid JSON payload` → throws; 401, 429, 503 and a 502 HTML body → throws.
-  - `The_access_token_is_requested_per_send_not_cached_by_the_sender` (the provider caches).
+  - `ServiceAccountTokenProviderTests`: the POST goes to `token_uri` as a form with `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer` and an `assertion` whose header is RS256, claims `iss` = client email, `scope` = `https://www.googleapis.com/auth/firebase.messaging`, `aud` = token uri, `exp` - `iat` = 3600, and whose signature verifies with the public key; the token is reused until 5 minutes before expiry then renewed (`FakeTimeProvider`); a non-2xx answer or a body without `access_token` throws.
 - [ ] **Step 2: Run to verify they fail.** Run: `cd backend && dotnet test tests/Chat.Api.Tests --filter FcmPushSenderTests`. Expected: compile error.
-- [ ] **Step 3: Implement** `FcmPushSender : IPushSender` (`Platform = PushPlatform.Fcm`) and the registration branch (project id from the JSON; missing file already covered by Task 1's test).
+- [ ] **Step 3: Implement** `ServiceAccountTokenProvider` (RS256 via `RSA.ImportFromPem` and `SignData(..., SHA256, RSASignaturePadding.Pkcs1)`), `FcmPushSender : IPushSender` (`Platform = PushPlatform.Fcm`) and the registration branch (`ServiceAccount.Load`; missing file already covered by Task 1's test).
 - [ ] **Step 4: Run FCM and registration tests.** Expected: PASS.
 - [ ] **Step 5: Commit**
 

@@ -8,7 +8,7 @@ Two loose ends from "Next steps":
 
 1. Bytes of media that nothing uses any more stay in the object store forever (a deleted message's files, a replaced
    avatar, an upload that was never attached). A background job removes them.
-2. The 6.0 level-2 diagram (`03c`) does not show that 6.1 reads D1 (the target user) and the block list (D4).
+2. The 6.0 level-2 diagram (`03c`) does not show that 6.1 reads D1 (the target user) and the block list (D4). This is recorded for a later redraw, not fixed here.
 
 No schema change, no API change.
 
@@ -47,12 +47,13 @@ Chat.Api/Files/
 `PresenceRefresher`) and repeats within a tick until a batch comes back smaller than `BatchSize`. `RunOnceAsync` is public
 so tests call it directly. Disabled by `Enabled = false`; the API test host disables it so tests control the clock.
 
-## Diagram
+## Diagram (deferred)
 
-`03c-dfd-level-2-moderation.drawio` gets two flows into 6.1: `reported user` from D1 and `block list` from D4 (duplicate
-data store symbols as the other flows use). The README table row for 6.1 already says what it checks; add "and that the
-target is visible to them (D1) and not behind a block (D4)" so text and picture agree. The level-1 diagram is unchanged:
-6.0 already reads those stores there. Regenerate the PNG with `scripts/export-diagrams.mjs`.
+Not done in this change, by the owner's decision. `03c-dfd-level-2-moderation.drawio` still lacks two flows into 6.1: `reported user`
+from D1 and `block list` from D4 (duplicate data store symbols, as the other flows use). When it is redrawn, also add "and that the
+target is visible to them (D1) and not behind a block (D4)" to the 6.1 row of the README 3c table so text and picture agree, check
+that `02-dfd-level-1.drawio` shows 6.0 reading D1 and D4 (it should), and regenerate the PNG with `scripts/export-diagrams.mjs`.
+The work is recorded in CLAUDE.md "Next steps" for the final review to pick up.
 
 ## Testing
 
@@ -69,4 +70,4 @@ Against real PostgreSQL and the in-memory object store:
 
 ## Docs to update with the code
 
-README "API: media" (one bullet on cleanup and its settings), 3c table row for 6.1, CLAUDE.md "Next steps".
+README "API: media" (one bullet on cleanup and its settings), CLAUDE.md "Next steps" (the diagram item stays there).
