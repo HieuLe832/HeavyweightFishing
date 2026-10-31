@@ -80,6 +80,41 @@ public class AccountService(
         await SendAsync(user.Email, EmailTemplates.VerifyEmail(code), ct);
     }
 
+    /// <summary>Sends a reset code to an active account. Silent for unknown, inactive or throttled requests.</summary>
+    public async Task RequestPasswordResetAsync(string email, CancellationToken ct)
+    {
+        var address = email.Trim();
+        var user = await db.Users.SingleOrDefaultAsync(u => u.Email == address && u.Status == UserStatus.Active, ct);
+        if (user is null || await codes.WasIssuedRecentlyAsync(user.Id, VerificationPurpose.ResetPassword, ct)) return;
+
+        var code = await codes.IssueAsync(user.Id, VerificationPurpose.ResetPassword, ct);
+        await db.SaveChangesAsync(ct);
+        await SendAsync(user.Email, EmailTemplates.ResetPassword(code), ct);
+    }
+
+    public async Task<Result<bool>> ConfirmPasswordResetAsync(PasswordResetConfirmRequest request, CancellationToken ct)
+    {
+        var address = request.Email!.Trim();
+        var user = await db.Users.SingleOrDefaultAsync(u => u.Email == address && u.Status == UserStatus.Active, ct);
+        if (user is null || !await codes.CheckAsync(user.Id, VerificationPurpose.ResetPassword, request.Code!, ct))
+            return AuthError.InvalidCode;
+
+        var now = time.GetUtcNow();
+        user.PasswordHash = hasher.HashPassword(user, request.NewPassword!);
+        user.FailedLoginCount = 0;
+        user.LockedUntil = null;
+        user.UpdatedAt = now;
+
+        // The new hash and the sign-out of every device land together or not at all.
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await db.SaveChangesAsync(ct);
+        await db.Sessions.Where(s => s.UserId == user.Id && s.RevokedAt == null).ExecuteUpdateAsync(s => s
+            .SetProperty(x => x.RevokedAt, now)
+            .SetProperty(x => x.RevokeReason, RevokeReasons.PasswordReset), ct);
+        await tx.CommitAsync(ct);
+        return true;
+    }
+
     // A failed send must not fail the request: the user can ask for a new code.
     private async Task SendAsync(string to, (string Subject, string Body) mail, CancellationToken ct)
     {

@@ -7,6 +7,14 @@ using Microsoft.Extensions.Options;
 
 namespace Chat.Api.Auth;
 
+public static class RevokeReasons
+{
+    public const string Logout = "logout";
+    public const string RefreshReuse = "refresh_reuse";
+    public const string UserInactive = "user_inactive";
+    public const string PasswordReset = "password_reset";
+}
+
 public record ClientInfo(string UserAgent, IPAddress IpAddress);
 
 /// <summary>Processes 1.4 Sign In with Password and 1.5 Manage Sessions &amp; Tokens.</summary>
@@ -57,6 +65,58 @@ public class SignInService(
         if (user.Status == UserStatus.Banned) return AuthError.AccountBanned;
 
         return await StartSessionAsync(user, request.DeviceName, client, now, ct);
+    }
+
+    public async Task<Result<AuthResponse>> RefreshAsync(string refreshToken, CancellationToken ct)
+    {
+        var hash = TokenService.HashRefreshToken(refreshToken);
+        var token = await db.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == hash, ct);
+        if (token is null) return AuthError.InvalidRefreshToken;
+
+        var now = time.GetUtcNow();
+        var session = await db.Sessions.SingleAsync(s => s.Id == token.SessionId, ct);
+        if (session.RevokedAt is not null || session.ExpiresAt <= now) return AuthError.InvalidRefreshToken;
+
+        // A used token showing up again means someone copied it: end the whole session.
+        if (token.UsedAt is not null) return await RevokeAsync(session.Id, RevokeReasons.RefreshReuse, now, ct);
+        if (token.ExpiresAt <= now) return AuthError.InvalidRefreshToken;
+
+        var user = await db.Users.SingleAsync(u => u.Id == session.UserId, ct);
+        if (user.Status != UserStatus.Active) return await RevokeAsync(session.Id, RevokeReasons.UserInactive, now, ct);
+
+        // Claiming the token is one conditional UPDATE: of two parallel refreshes only one gets a row.
+        var claimed = await db.RefreshTokens.Where(t => t.Id == token.Id && t.UsedAt == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.UsedAt, now), ct);
+        if (claimed == 0) return await RevokeAsync(session.Id, RevokeReasons.RefreshReuse, now, ct);
+
+        var next = AddRefreshToken(session, now);
+        session.LastSeenAt = now;
+        session.ExpiresAt = now.AddDays(_o.RefreshTokenDays);
+        await db.SaveChangesAsync(ct);
+        return Respond(user, session.Id, next);
+    }
+
+    public async Task LogoutAsync(Guid sessionId, CancellationToken ct) =>
+        await RevokeAsync(sessionId, RevokeReasons.Logout, time.GetUtcNow(), ct);
+
+    public async Task<List<SessionSummary>> ListSessionsAsync(Guid userId, Guid currentSessionId, CancellationToken ct)
+    {
+        var now = time.GetUtcNow();
+        var sessions = await db.Sessions
+            .Where(s => s.UserId == userId && s.RevokedAt == null && s.ExpiresAt > now)
+            .OrderByDescending(s => s.LastSeenAt)
+            .ToListAsync(ct);
+        return sessions.Select(s => new SessionSummary(
+            s.Id, s.DeviceName, s.UserAgent, s.IpAddress.ToString(), s.CreatedAt, s.LastSeenAt, s.Id == currentSessionId)).ToList();
+    }
+
+    /// <summary>Revokes one session and returns the refresh-token failure the caller usually wants to hand back.</summary>
+    private async Task<AuthError> RevokeAsync(Guid sessionId, string reason, DateTimeOffset now, CancellationToken ct)
+    {
+        await db.Sessions.Where(s => s.Id == sessionId && s.RevokedAt == null).ExecuteUpdateAsync(s => s
+            .SetProperty(x => x.RevokedAt, now)
+            .SetProperty(x => x.RevokeReason, reason), ct);
+        return AuthError.InvalidRefreshToken;
     }
 
     // The increment is one UPDATE, so parallel guesses cannot slip past the counter.

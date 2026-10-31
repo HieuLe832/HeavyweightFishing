@@ -143,6 +143,25 @@ Design decisions worth knowing:
   destroy the evidence.
 - **Admins** are users with `role = admin`. There is no separate admin table.
 
+## API: auth
+
+Implements processes 1.1–1.5 and 1.7. 1.6 (Google) is not built yet. Design:
+[specs/2026-10-31-auth-endpoints-design.md](superpowers/specs/2026-10-31-auth-endpoints-design.md).
+
+| Process | Endpoint | Notes |
+|---------|----------|-------|
+| 1.1 | `POST /auth/register` | Creates a `pending` account and emails a 6-digit code |
+| 1.2 | `POST /auth/verify-email`, `POST /auth/resend-verification` | Resend always answers 202 |
+| 1.3 | `POST /auth/password-reset/request`, `POST /auth/password-reset/confirm` | Confirm revokes every session |
+| 1.4, 1.5 | `POST /auth/login` | Email or username; 5 failures lock the account for 15 minutes |
+| 1.5 | `POST /auth/refresh`, `POST /auth/logout` | Refresh tokens rotate; reuse revokes the session |
+| 1.7 | `GET /auth/me`, `GET /auth/sessions` | Bearer token; the session is checked on every request |
+
+Tokens: the access token is a 15-minute JWT (`sub`, `role`, `sid`). The refresh token is random, lasts
+30 days (sliding) and is stored as a SHA-256 hash. Errors are `application/problem+json` with a
+`code` field. Settings live under `Auth` and `Smtp` in `appsettings.json`; `Auth:JwtKey` and
+`Auth:CodeKey` have no default outside Development.
+
 ## Pitfalls
 
 Traps in the schema and the stack are listed in [pitfalls.md](pitfalls.md).

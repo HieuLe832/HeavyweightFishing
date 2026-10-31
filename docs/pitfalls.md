@@ -36,7 +36,19 @@ Things that look fine and break later. Many are pinned by tests in
   all rows in `sessions`, otherwise a banned user keeps a valid access token until it expires. *(Not
   built yet.)*
 - **Refresh-token reuse revokes the session.** A token with `used_at` set that is presented again means
-  theft; revoke the whole session, not just that token. *(Not built yet.)*
+  theft; revoke the whole session, not just that token. `SignInService.RefreshAsync` does this.
+- **Refresh calls from one client must not overlap.** Two parallel refreshes with the same token look like
+  reuse: one wins, the other fails and the session is revoked. Clients serialise their refresh calls.
+- **Every authenticated request reads `sessions`.** `JwtBearerSetup` checks the session after validating
+  the JWT; that lookup is what makes logout, password reset and bans immediate. Do not cache it without
+  a short TTL, and do not skip it for "cheap" endpoints.
+- **Verification codes are HMACs, not plain hashes.** Six digits are brute-forceable from a leaked hash,
+  so `CodeService` keys the hash with `Auth:CodeKey` and allows 5 attempts. Rotating the key invalidates
+  every unused code.
+- **A locked account answers like a wrong password.** Do not return a distinct "locked" error: it would tell
+  a guesser when a guess is right.
+- **Access-token expiry follows `TimeProvider`.** The default JwtBearer lifetime check reads the system
+  clock, so `JwtBearerSetup` supplies its own validator. Keep it if tests move the fake clock.
 
 ## Tooling
 

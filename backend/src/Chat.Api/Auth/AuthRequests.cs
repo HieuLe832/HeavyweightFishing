@@ -6,9 +6,17 @@ public record RegisterRequest(string? Username, string? Email, string? Password,
 
 public record VerifyEmailRequest(string? Email, string? Code);
 
+public record PasswordResetConfirmRequest(string? Email, string? Code, string? NewPassword);
+
 public record EmailRequest(string? Email);
 
 public record LoginRequest(string? Identifier, string? Password, string? DeviceName);
+
+public record RefreshRequest(string? RefreshToken);
+
+public record SessionSummary(
+    Guid Id, string DeviceName, string UserAgent, string IpAddress,
+    DateTimeOffset CreatedAt, DateTimeOffset LastSeenAt, bool Current);
 
 public record UserSummary(Guid Id, string Username, string Email, string DisplayName, string Role);
 
@@ -35,6 +43,15 @@ public static partial class AuthValidation
         return errors;
     }
 
+    public static Dictionary<string, string[]> Validate(PasswordResetConfirmRequest r)
+    {
+        var errors = new Dictionary<string, string[]>();
+        AddEmail(errors, r.Email);
+        if (r.Code is null || !SixDigits().IsMatch(r.Code)) errors["code"] = ["Enter the 6-digit code."];
+        AddPassword(errors, "newPassword", r.NewPassword);
+        return errors;
+    }
+
     public static Dictionary<string, string[]> Validate(EmailRequest r)
     {
         var errors = new Dictionary<string, string[]>();
@@ -51,6 +68,11 @@ public static partial class AuthValidation
             errors["password"] = ["Enter your password."];
         return errors;
     }
+
+    public static Dictionary<string, string[]> Validate(RefreshRequest r) =>
+        string.IsNullOrWhiteSpace(r.RefreshToken) || r.RefreshToken.Length > 256
+            ? new() { ["refreshToken"] = ["Send the refresh token."] }
+            : [];
 
     public static void AddEmail(Dictionary<string, string[]> errors, string? email)
     {

@@ -39,6 +39,25 @@ public static class AuthEndpoints
             return Results.Accepted();
         });
 
+        auth.MapPost("/password-reset/request", async (EmailRequest request, AccountService accounts, CancellationToken ct) =>
+        {
+            var errors = AuthValidation.Validate(request);
+            if (errors.Count > 0) return ProblemResults.Invalid(errors);
+
+            await accounts.RequestPasswordResetAsync(request.Email!, ct);
+            return Results.Accepted();
+        });
+
+        auth.MapPost("/password-reset/confirm", async (
+            PasswordResetConfirmRequest request, AccountService accounts, CancellationToken ct) =>
+        {
+            var errors = AuthValidation.Validate(request);
+            if (errors.Count > 0) return ProblemResults.Invalid(errors);
+
+            var result = await accounts.ConfirmPasswordResetAsync(request, ct);
+            return result.Error is { } error ? ProblemResults.Problem(error) : Results.NoContent();
+        });
+
         auth.MapPost("/login", async (
             LoginRequest request, HttpContext http, SignInService signIn, CancellationToken ct) =>
         {
@@ -51,6 +70,25 @@ public static class AuthEndpoints
             var result = await signIn.LoginAsync(request, client, ct);
             return result.Error is { } error ? ProblemResults.Problem(error) : Results.Ok(result.Value);
         });
+
+        auth.MapPost("/refresh", async (RefreshRequest request, SignInService signIn, CancellationToken ct) =>
+        {
+            var errors = AuthValidation.Validate(request);
+            if (errors.Count > 0) return ProblemResults.Invalid(errors);
+
+            var result = await signIn.RefreshAsync(request.RefreshToken!, ct);
+            return result.Error is { } error ? ProblemResults.Problem(error) : Results.Ok(result.Value);
+        });
+
+        auth.MapPost("/logout", async (ClaimsPrincipal principal, SignInService signIn, CancellationToken ct) =>
+        {
+            await signIn.LogoutAsync(principal.SessionId(), ct);
+            return Results.NoContent();
+        }).RequireAuthorization();
+
+        auth.MapGet("/sessions", async (ClaimsPrincipal principal, SignInService signIn, CancellationToken ct) =>
+            Results.Ok(await signIn.ListSessionsAsync(principal.UserId(), principal.SessionId(), ct))
+        ).RequireAuthorization();
 
         auth.MapGet("/me", async (ClaimsPrincipal principal, ChatDbContext db, CancellationToken ct) =>
         {

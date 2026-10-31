@@ -26,7 +26,7 @@ A chat app whose frontend look is derived from the Vietnamese fishing game *Câu
 ## Stack
 
 - **Backend:** C# on .NET 10, ASP.NET Core, EF Core (Npgsql). Solution in `backend/`:
-  `Chat.Data` (entities, EF configuration, migrations), `Chat.Api`, `Chat.Data.Tests`.
+  `Chat.Data` (entities, EF configuration, migrations), `Chat.Api`, `Chat.Data.Tests`, `Chat.Api.Tests`.
 - **Frontend:** TypeScript, Next.js (App Router), Tailwind. In `frontend/`.
 - **Infrastructure:** `docker-compose.yml` runs PostgreSQL 17, Redis (D9 and the real-time backplane),
   RabbitMQ (fan-out, push, email), an S3-compatible object store (D7 bytes), and Mailpit (dev email).
@@ -37,7 +37,7 @@ A chat app whose frontend look is derived from the Vietnamese fishing game *Câu
 
 ```bash
 docker compose up -d --wait                     # infrastructure
-cd backend && dotnet test                       # schema tests (starts its own PostgreSQL via Docker)
+cd backend && dotnet test                       # schema and API tests (start their own PostgreSQL via Docker)
 cd backend && dotnet run --project src/Chat.Api # API, applies migrations in Development
 cd frontend && npm install && npm run dev
 ```
@@ -53,7 +53,7 @@ After changing entities, add a migration:
 
 ## Next steps
 
-1. Auth endpoints (processes 1.1–1.7).
+1. Sign in with Google (1.6). Processes 1.1–1.5 and 1.7 are done: see "API: auth" in `docs/README.md`.
 2. Profile, contacts, blocking (2.0) and conversations (3.0).
 3. Messaging over WebSocket with SignalR, Redis and RabbitMQ (4.0).
 4. Media upload (5.0) and moderation (6.0).
