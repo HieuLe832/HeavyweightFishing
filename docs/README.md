@@ -129,6 +129,9 @@ Design decisions worth knowing:
 - **Message ordering and idempotency.** `messages.seq` is unique per conversation and gives a total
   order for sync. `(sender_id, client_msg_id)` is unique, so a client can retry a send without
   creating duplicates.
+- **Allocating `seq`.** `conversations.last_seq` is the last number handed out. The send transaction
+  locks the conversation row, increments `last_seq`, and uses the result as the message's `seq`, so
+  numbers never repeat or skip. Do not derive the next `seq` from `MAX(seq)`.
 - **One direct chat per pair.** `conversations.direct_key` (the two user ids, sorted) is unique for
   direct chats and NULL for groups.
 - **Receipts as cursors.** `conversation_members.last_read_seq` and `last_delivered_seq` replace a
@@ -139,6 +142,10 @@ Design decisions worth knowing:
 - **Report evidence** is a JSON snapshot of the reported message, so deleting the message does not
   destroy the evidence.
 - **Admins** are users with `role = admin`. There is no separate admin table.
+
+## Pitfalls
+
+Traps in the schema and the stack are listed in [pitfalls.md](pitfalls.md).
 
 ## Editing the diagrams
 

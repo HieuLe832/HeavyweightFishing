@@ -22,3 +22,39 @@ A chat app whose frontend look is derived from the Vietnamese fishing game *Câu
 - After editing a `.drawio` file, regenerate its PNG. Start `jgraph/drawio` in Docker on
   `127.0.0.1:18080`, then run `node scripts/export-diagrams.mjs [name-filter]`. The script uses the
   local Google Chrome headless and needs Node >= 22. Stop the container afterwards.
+
+## Stack
+
+- **Backend:** C# on .NET 10, ASP.NET Core, EF Core (Npgsql). Solution in `backend/`:
+  `Chat.Data` (entities, EF configuration, migrations), `Chat.Api`, `Chat.Data.Tests`.
+- **Frontend:** TypeScript, Next.js (App Router), Tailwind. In `frontend/`.
+- **Infrastructure:** `docker-compose.yml` runs PostgreSQL 17, Redis (D9 and the real-time backplane),
+  RabbitMQ (fan-out, push, email), an S3-compatible object store (D7 bytes), and Mailpit (dev email).
+  Backend and frontend run on the host during development.
+- Any other stack is fine if it runs from Docker.
+
+## Commands
+
+```bash
+docker compose up -d --wait                     # infrastructure
+cd backend && dotnet test                       # schema tests (starts its own PostgreSQL via Docker)
+cd backend && dotnet run --project src/Chat.Api # API, applies migrations in Development
+cd frontend && npm install && npm run dev
+```
+
+After changing entities, add a migration:
+`dotnet ef migrations add <Name> --project src/Chat.Data --output-dir Migrations`.
+
+## Schema rules
+
+- The schema must match `docs/diagrams/04-erd.drawio`. `ErdSchemaTests` holds the expected tables,
+  columns, keys and foreign keys. Change the ERD, the README, and that test together.
+- Read [docs/pitfalls.md](docs/pitfalls.md) before touching the schema, auth, or `messages`.
+
+## Next steps
+
+1. Auth endpoints (processes 1.1–1.7).
+2. Profile, contacts, blocking (2.0) and conversations (3.0).
+3. Messaging over WebSocket with SignalR, Redis and RabbitMQ (4.0).
+4. Media upload (5.0) and moderation (6.0).
+5. Chat UI with the game-inspired theme.
