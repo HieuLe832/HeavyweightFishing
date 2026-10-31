@@ -31,11 +31,11 @@ public static class HubTestHelpers
         return (await response.JsonAsync()).GetProperty("conversation").GetProperty("id").GetGuid();
     }
 
-    /// <summary>HubException messages are the API error codes.</summary>
+    /// <summary>The server throws HubException(code); SignalR delivers it as "...error on the server. HubException: code".</summary>
     public static async Task AssertHubErrorAsync(Func<Task> call, string code)
     {
         var e = await Assert.ThrowsAsync<HubException>(call);
-        Assert.Equal(code, e.Message);
+        Assert.EndsWith($"HubException: {code}", e.Message);
     }
 
     /// <summary>Collects the events a connection receives so a test can wait for, or rule out, the next one.</summary>

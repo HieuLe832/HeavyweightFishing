@@ -32,4 +32,5 @@ public readonly record struct Result<T>(T? Value, AuthError? Error)
 {
     public static implicit operator Result<T>(T value) => new(value, null);
     public static implicit operator Result<T>(AuthError error) => new(default, error);
+    public static Result<T> FromError(AuthError error) => new(default, error);
 }
