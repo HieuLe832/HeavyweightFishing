@@ -1,0 +1,70 @@
+# Local development infrastructure. The backend and frontend run on the host (dotnet run / npm run dev)
+# against these services; their Dockerfiles are for building images. Credentials are dev-only.
+name: chat
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: chat
+      POSTGRES_PASSWORD: chat
+      POSTGRES_DB: chat
+    ports: ["127.0.0.1:5432:5432"]
+    volumes: [postgres-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chat -d chat"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports: ["127.0.0.1:6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: chat
+      RABBITMQ_DEFAULT_PASS: chat
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672" # management UI
+    volumes: [rabbitmq-data:/var/lib/rabbitmq]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # S3-compatible object storage for D7 file bytes. MinIO no longer publishes images, so this is
+  # RustFS, which keeps the same ports and S3 API.
+  objectstore:
+    image: rustfs/rustfs:latest
+    environment:
+      RUSTFS_ACCESS_KEY: chat
+      RUSTFS_SECRET_KEY: chat-secret
+    ports:
+      - "127.0.0.1:9000:9000" # S3 API
+      - "127.0.0.1:9001:9001" # console
+    volumes: [objectstore-data:/data]
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "127.0.0.1:1025:1025" # SMTP
+      - "127.0.0.1:8025:8025" # web inbox
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres-data:
+  rabbitmq-data:
+  objectstore-data:
