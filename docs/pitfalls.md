@@ -65,6 +65,23 @@ Things that look fine and break later. Many are pinned by tests in
 - **Blocking does not end existing chats.** It only stops new direct chats and group adds. Message delivery
   between blocked users has to be refused in 4.1.
 
+## Messaging
+
+- **Publish events after the commit.** `MessageBroadcaster` runs once the transaction is committed, never inside it;
+  otherwise a rolled-back change is still announced. A delivery failure is logged and swallowed, since the change happened.
+- **The socket outlives the access token.** JWT validation runs only on connect, so `CommandValidator.CheckCallerAsync`
+  re-reads the session and user status on every hub command. Keep it first in every new hub method.
+- **Clear the change tracker before taking the `seq`.** The validator loads the conversation in the same scope, so its
+  `last_seq` is stale once `MessageWriter` holds the lock; reusing it hands out a duplicate `seq`.
+- **Hub errors keep the `user_not_found` / `blocked` split.** The same rule as REST: do not collapse them, or a block shows.
+- **`HubException` carries the code.** Anything else thrown in a hub reaches the client as a generic error.
+- **`Clients.Users` needs `SubClaimUserIdProvider`.** JWT claims are not remapped, so the default provider finds no user id
+  and events silently go nowhere.
+- **Deleted text is nulled, not hidden.** Do not add code that relies on the body of a deleted message; evidence lives in the
+  report snapshot (6.1).
+- **A system notice is written inside the group change.** Use `MessageWriter.WriteSystem` from `GroupService.MutateAsync`,
+  never a second transaction (system messages are not deduplicated).
+
 ## Tooling
 
 - **Edit `.drawio` files, never the PNGs.** Regenerate the PNG after every diagram change (see

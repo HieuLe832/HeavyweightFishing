@@ -217,8 +217,55 @@ Rules:
 - **Rejoining** gives a fresh member row state: role `member`, no mute, and read cursors at the current
   `last_seq`, so nothing from before shows as unread.
 - A group holds at most 256 members.
-- `unread` is `last_seq - last_read_seq`. Nothing moves `last_read_seq` yet (that is 4.5), so it counts every message.
-- System notices ("Lan joined the group") are not written yet: they are messages, so they arrive with 4.0.
+- `unread` is `last_seq - last_read_seq`. Only sending moves it so far (your own cursor jumps to your new message);
+  reading and delivery cursors for other members arrive with 4.5, so for them it counts every message.
+- Group changes write system notices (`type = system`, no sender) in the same transaction; see "API: messaging".
+
+## API: messaging
+
+Slice 1 of process 4.0: 4.1 Validate Command, 4.2 Store Message, 4.6 Serve History & Sync and a single-node 4.3.
+Redis (backplane, presence), RabbitMQ fan-out, 4.5 receipts / typing / presence and 4.4 push come in later slices.
+Text messages only; media waits for 5.0.
+
+**Connecting.** SignalR hub at `/hubs/chat`, authenticated with the access token. Browsers cannot set headers on a
+WebSocket, so the hub also accepts `?access_token=...` (for this path only). The session check of 1.7 runs on connect.
+
+**Commands** are hub methods. A failure is a `HubException` whose message ends with `HubException: <code>`, using the
+same codes as the REST API.
+
+| Method | Arguments | Returns |
+|--------|-----------|---------|
+| `SendMessage` | `conversationId`, `clientMsgId`, `body`, `replyToId?` | the stored message (also the ack) |
+| `EditMessage` | `messageId`, `body` | the message |
+| `DeleteMessage` | `messageId` | the message as a tombstone |
+| `React` | `messageId`, `emoji`, `on` | nothing. `on` sets state (add / remove), so a retry cannot flip it |
+
+**Events** go to every connected device of every active member, the sender's other devices included:
+`message.created` (also for system notices), `message.edited`, `message.deleted` (all carry a message) and
+`message.reaction` `{ conversationId, messageId, userId, emoji, on }`. A message is `{ id, conversationId, seq,
+senderId?, clientMsgId, type, body?, replyToId?, createdAt, editedAt?, deletedAt?, reactions: [{ emoji, count, mine }] }`.
+In events `mine` is always false, since one event goes to everyone.
+
+**History:** `GET /conversations/{id}/messages?before=&after=&limit=` returns `{ messages, hasMore }` in ascending `seq`.
+No cursor gives the latest page, `before` the page just older than that `seq`, `after` the messages newer than it (how a
+reconnecting client fills its gap). `limit` 1-50 (default 50); `before` with `after` is a 400.
+
+Rules:
+
+- **Sending** trims the body (1-4000 characters), takes the next `seq` under the conversation lock and returns the
+  original message when `clientMsgId` was already used by the same sender in that conversation; used in another
+  conversation it is `409 conflict`. At most 20 sends per 10 seconds per user (`rate_limited`).
+- **Blocks** in a direct chat refuse send, edit, delete and react in both directions. If the other person blocked you
+  it looks like a missing user (`user_not_found`); if you blocked them it is `blocked`. History still works.
+- **Edit and delete** are for your own messages. Anything you may not touch (someone else's, a system notice, a
+  conversation you left) is `message_not_found`. Delete is soft: the row and its `seq` stay, `body` is set to null in the
+  database, and history returns a tombstone. Deleting twice does nothing.
+- **Every command re-checks the session** and that the user is active (`session_ended`), because a socket outlives its token.
+- **System notices** have a JSON `body`: `{"kind":"member_added","actorId","userId"}`, `member_removed` (same fields),
+  `member_left` (`userId`), `renamed` (`actorId`, `title`). Role changes write none. Someone removed or leaving also receives
+  the notice that ends their membership. Clients render the text.
+- **Known limit:** `seq` exists only for new messages, so edits, deletes and reactions made while a client was offline are not
+  replayed by `after`. The client refetches the page it shows.
 
 ## Pitfalls
 

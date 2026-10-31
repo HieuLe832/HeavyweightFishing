@@ -53,10 +53,11 @@ After changing entities, add a migration:
 
 ## Next steps
 
-1. Messaging over WebSocket with SignalR, Redis and RabbitMQ (4.0). It must also write system notices for
-   3.0 (joined, left, renamed) and refuse messages between blocked users.
+1. Messaging, next slices (4.0). Slice 2: Redis backplane and presence (D9), RabbitMQ fan-out, and 4.5 receipts /
+   typing / presence. Slice 3: 4.4 push notifications.
 2. Media upload (5.0) and moderation (6.0).
 3. Chat UI with the game-inspired theme.
 
-Skipped for now: Sign in with Google (1.6). Done: processes 1.1–1.5, 1.7, 2.0 and 3.0; see the "API: …"
-sections in `docs/README.md`.
+Skipped for now: Sign in with Google (1.6). Done: processes 1.1–1.5, 1.7, 2.0 and 3.0, and the first slice of 4.0
+(4.1, 4.2, 4.6 and a single-node 4.3: send, edit, delete, react, history, system notices); see the "API: …" sections
+in `docs/README.md`.
