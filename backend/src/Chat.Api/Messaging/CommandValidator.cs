@@ -66,4 +66,21 @@ public class CommandValidator(ChatDbContext db, ConversationReader reader, UserA
         if (await access.HasBlockedAsync(userId, other, ct)) return AuthError.Blocked;
         return membership;
     }
+
+    /// <summary>
+    /// A user message the caller may act on: it exists, is not a system notice, and the caller is an active member
+    /// (a non-member or a member who left gets the same <c>message_not_found</c> as a missing id, so ids cannot be probed).
+    /// With <paramref name="senderOnly"/>, it must also be the caller's own. The block rules of <see cref="CheckMemberAsync"/> apply.
+    /// The returned message is tracked, ready for <see cref="MessageWriter"/>.
+    /// </summary>
+    public async Task<Result<Message>> CheckMessageAsync(Guid userId, Guid messageId, bool senderOnly, CancellationToken ct)
+    {
+        var message = await db.Messages.SingleOrDefaultAsync(m => m.Id == messageId && m.Type != MessageType.System, ct);
+        if (message is null) return AuthError.MessageNotFound;
+
+        var member = await CheckMemberAsync(userId, message.ConversationId, ct);
+        if (member.Error == AuthError.ConversationNotFound) return AuthError.MessageNotFound;
+        if (member.Error is { } error) return error;
+        return senderOnly && message.SenderId != userId ? AuthError.MessageNotFound : message;
+    }
 }

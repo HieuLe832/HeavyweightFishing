@@ -9,6 +9,9 @@ namespace Chat.Api.Messaging;
 /// <param name="Created">False when the send was a retry and the original message came back.</param>
 public record SendResult(MessageDto Message, bool Created);
 
+/// <param name="Changed">False when the message was already deleted.</param>
+public record DeleteResult(MessageDto Message, bool Changed);
+
 /// <summary>Process 4.2: the only writer of D6.</summary>
 public class MessageWriter(ChatDbContext db, TimeProvider time)
 {
@@ -61,6 +64,29 @@ public class MessageWriter(ChatDbContext db, TimeProvider time)
         }
         await tx.CommitAsync(ct);
         return new SendResult(ToDto(message), true);
+    }
+
+    /// <summary>Replaces the body of the caller's own message, which <see cref="CommandValidator.CheckMessageAsync"/> returned.</summary>
+    public async Task<Result<MessageDto>> EditAsync(Message message, string body, CancellationToken ct)
+    {
+        if (message.DeletedAt is not null) return AuthError.MessageDeleted;
+        message.Body = body;
+        message.EditedAt = time.GetUtcNow();
+        await db.SaveChangesAsync(ct);
+        return ToDto(message);
+    }
+
+    /// <summary>
+    /// Soft delete: the row and its <c>seq</c> stay so history has no gaps, but the text is gone from the database.
+    /// Reports keep their own snapshot as evidence (6.1). Deleting twice is a no-op.
+    /// </summary>
+    public async Task<DeleteResult> DeleteAsync(Message message, CancellationToken ct)
+    {
+        if (message.DeletedAt is not null) return new DeleteResult(ToDto(message), false);
+        message.Body = null;
+        message.DeletedAt = time.GetUtcNow();
+        await db.SaveChangesAsync(ct);
+        return new DeleteResult(ToDto(message), true);
     }
 
     /// <summary>The sender's earlier message with this client id: that message in the same conversation, else a conflict.</summary>

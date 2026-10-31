@@ -27,6 +27,34 @@ public class ChatHub(
         return result.Value.Message;
     }
 
+    public async Task<MessageDto> EditMessage(Guid messageId, string body)
+    {
+        var ct = Context.ConnectionAborted;
+        Fail(await validator.CheckCallerAsync(Context.User!, ct));
+        var normalized = CommandValidator.NormalizeBody(body, options.Value.MaxBodyLength);
+        var found = await validator.CheckMessageAsync(Context.User!.UserId(), messageId, senderOnly: true, ct);
+        Fail(found.Error);
+        if (normalized is null) Fail(AuthError.Invalid);
+
+        var edited = await writer.EditAsync(found.Value!, normalized!, ct);
+        Fail(edited.Error);
+        await broadcaster.PublishAsync("message.edited", edited.Value!, edited.Value!.ConversationId, null, ct);
+        return edited.Value;
+    }
+
+    public async Task<MessageDto> DeleteMessage(Guid messageId)
+    {
+        var ct = Context.ConnectionAborted;
+        Fail(await validator.CheckCallerAsync(Context.User!, ct));
+        var found = await validator.CheckMessageAsync(Context.User!.UserId(), messageId, senderOnly: true, ct);
+        Fail(found.Error);
+
+        var deleted = await writer.DeleteAsync(found.Value!, ct);
+        if (deleted.Changed)
+            await broadcaster.PublishAsync("message.deleted", deleted.Message, deleted.Message.ConversationId, null, ct);
+        return deleted.Message;
+    }
+
     private static void Fail(AuthError? error)
     {
         if (error is not null) throw new HubException(error.Code);
