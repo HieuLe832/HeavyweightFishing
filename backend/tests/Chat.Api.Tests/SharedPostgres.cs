@@ -7,7 +7,7 @@ public static class SharedPostgres
 {
     private static readonly Lazy<Task<PostgreSqlContainer>> Container = new(async () =>
     {
-        var container = new PostgreSqlBuilder("postgres:17-alpine").Build();
+        var container = new PostgreSqlBuilder("postgres:17-alpine").WithCommand("-c", "max_connections=1000").Build();
         await container.StartAsync();
         return container;
     });

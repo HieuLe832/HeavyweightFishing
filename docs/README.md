@@ -223,9 +223,9 @@ Rules:
 
 ## API: messaging
 
-Slice 1 of process 4.0: 4.1 Validate Command, 4.2 Store Message, 4.6 Serve History & Sync and a single-node 4.3.
-Redis (backplane, presence), RabbitMQ fan-out, 4.5 receipts / typing / presence and 4.4 push come in later slices.
-Text messages only; media waits for 5.0.
+Process 4.0: 4.1 Validate Command, 4.2 Store Message, 4.3 Fan Out Events, 4.5 Track Receipts, Typing & Presence (see
+[API: receipts, typing and presence](#api-receipts-typing-and-presence)) and 4.6 Serve History & Sync.
+4.4 push comes in a later slice. Text messages only; media waits for 5.0.
 
 **Connecting.** SignalR hub at `/hubs/chat`, authenticated with the access token. Browsers cannot set headers on a
 WebSocket, so the hub also accepts `?access_token=...` (for this path only). The session check of 1.7 runs on connect.
@@ -266,6 +266,43 @@ Rules:
   the notice that ends their membership. Clients render the text.
 - **Known limit:** `seq` exists only for new messages, so edits, deletes and reactions made while a client was offline are not
   replayed by `after`. The client refetches the page it shows.
+
+## API: receipts, typing and presence
+
+Process 4.5 and the real-time half of 4.3. Same hub (`/hubs/chat`), same error codes, same per-command session check.
+
+| Method | Arguments | Does |
+|--------|-----------|------|
+| `MarkDelivered` | `conversationId`, `upToSeq` | Moves the caller's `last_delivered_seq` forward |
+| `MarkRead` | `conversationId`, `upToSeq` | Moves `last_read_seq` forward; also counts as delivered |
+| `SetTyping` | `conversationId`, `typing` | Sets or clears the caller's typing signal |
+
+| Event | Payload | Sent to |
+|-------|---------|---------|
+| `receipt.updated` | `{ conversationId, userId, lastDeliveredSeq, lastReadSeq }` | every active member, the caller's other devices too |
+| `typing` | `{ conversationId, userId, typing }` | the other active members |
+| `presence.changed` | `{ userId, online }` | people who share an active conversation with the user, minus any block either way |
+
+- **Receipts** only move forward and are checked in the `UPDATE`, so two devices racing cannot move a cursor back. A repeated
+  or stale call sends no event. `upToSeq` must be between 0 and the conversation's `lastSeq` (else `validation_failed`).
+  Blocked direct chats refuse receipts like any other command. `GET /conversations/{id}` now lists each member's
+  `lastDeliveredSeq` and `lastReadSeq`.
+- **Typing** lasts 5 seconds. Clients repeat `typing: true` about every 3 seconds and hide the indicator after 6 seconds without
+  one. More than 10 calls per 10 seconds are dropped silently. Sending a message ends the sender's typing (clients clear on
+  `message.created`).
+- **Presence.** A user is online while one of their connections holds a 60-second lease; each node renews its own leases every
+  20 seconds, so a crashed node's users expire by themselves, without a `presence.changed`. Treat the events as hints and
+  reconcile with `GET /conversations/{id}/presence` → `{ online: [userId], typing: [userId] }` (members other than the caller,
+  minus blocks either way; non-members get `conversation_not_found`).
+- **Several nodes.** With `Redis:ConnectionString` set, SignalR uses the Redis backplane (channel prefix `chat`) and D9 lives in
+  Redis: `presence:{user}` is a sorted set of connection ids scored by lease expiry, `typing:{conversation}:{user}` a key with a
+  TTL. Without it the API runs one node with in-memory presence (and logs a warning). A Redis outage never fails a connect,
+  send or receipt; presence then reads as "nobody is online".
+- **Hand-off to push.** After a user message commits, members other than the sender with no live connection are published to
+  RabbitMQ: exchange `chat.events` (durable topic), routing key `message.created`, body `{ messageId, conversationId, seq,
+  senderId, offlineUserIds }`. It carries ids, never text. Consumers (`IBusHandler`) get a durable queue `chat.<name>` and a
+  dead-letter queue `chat.<name>.dead`; a handler that throws dead-letters the message. With `RabbitMq:Uri` unset an in-process bus
+  runs the handlers inline. Live sockets never use RabbitMQ.
 
 ## Pitfalls
 

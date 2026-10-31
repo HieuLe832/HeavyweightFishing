@@ -21,7 +21,7 @@ public record ConversationSummary(
     Guid Id, string Type, string? Title, PersonBrief? Peer, long LastSeq, long Unread,
     DateTimeOffset? MutedUntil, string Role, DateTimeOffset UpdatedAt);
 
-public record MemberSummary(Guid UserId, string Username, string DisplayName, string Role, DateTimeOffset JoinedAt);
+public record MemberSummary(Guid UserId, string Username, string DisplayName, string Role, DateTimeOffset JoinedAt, long LastDeliveredSeq, long LastReadSeq);
 
 public record ConversationDetail(ConversationSummary Conversation, List<MemberSummary> Members);
 

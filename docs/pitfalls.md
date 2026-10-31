@@ -82,7 +82,25 @@ Things that look fine and break later. Many are pinned by tests in
 - **A system notice is written inside the group change.** Use `MessageWriter.WriteSystem` from `GroupService.MutateAsync`,
   never a second transaction (system messages are not deduplicated).
 
+## Real-time and presence
+
+- **Presence leases, not flags.** A connection is online only while its lease is live; `PresenceRefresher` renews this node's
+  leases. Never store "online = true" without an expiry: a node that dies would leave its users online forever.
+- **A crash sends no `presence.changed`.** Events are hints; clients reconcile with `GET /conversations/{id}/presence`.
+- **Presence audience excludes blocks both ways.** `PresenceAudience` is the only place that decides who sees presence; sending
+  it to the whole conversation would show a blocker's comings and goings to the person they blocked.
+- **Presence must not break messaging.** `PresenceService` catches store errors. Do not call `IPresenceStore` directly from a
+  command path.
+- **Do not put message text on the bus.** The event has ids; the consumer reads the row, so a delete in between wins and no
+  private text sits in a queue.
+- **Publish to the bus after the commit,** like every event, and swallow the failure: push is best effort.
+- **A topic exchange drops messages with no queue.** Queues are declared by `RabbitMqConsumer`. Publishing before any consumer has
+  started (or with a handler removed) loses the event; that is fine for push, not for anything that must not be lost.
+- **`SetTyping` renews, it does not toggle.** Keep the key's TTL short; a stuck typing indicator means a client stopped sending.
+- **The per-user rate limiters are per node.** With several nodes the real limit is the limit times the node count.
+
 ## Tooling
+
 
 - **Edit `.drawio` files, never the PNGs.** Regenerate the PNG after every diagram change (see
   CLAUDE.md).

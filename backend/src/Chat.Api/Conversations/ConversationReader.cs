@@ -31,7 +31,7 @@ public class ConversationReader(ChatDbContext db)
             join u in db.Users on m.UserId equals u.Id
             where m.ConversationId == conversationId && m.LeftAt == null
             orderby m.JoinedAt, u.Username
-            select new MemberSummary(u.Id, u.Username, u.DisplayName, ConversationRules.Name(m.Role), m.JoinedAt)
+            select new MemberSummary(u.Id, u.Username, u.DisplayName, ConversationRules.Name(m.Role), m.JoinedAt, m.LastDeliveredSeq, m.LastReadSeq)
         ).ToListAsync(ct);
 
         PersonBrief? peer = null;

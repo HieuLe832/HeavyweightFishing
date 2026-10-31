@@ -1,4 +1,5 @@
 using Chat.Api.Auth;
+using Chat.Api.Realtime;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
@@ -9,8 +10,25 @@ namespace Chat.Api.Messaging;
 [Authorize]
 public class ChatHub(
     CommandValidator validator, MessageWriter writer, MessageBroadcaster broadcaster,
-    MessageRateLimiter limiter, IOptions<MessagingOptions> options) : Hub
+    MessageRateLimiter limiter, IOptions<MessagingOptions> options,
+    ReceiptService receipts, PresenceService presence, PresenceAnnouncer announcer, TypingRateLimiter typingLimiter) : Hub
 {
+    public override async Task OnConnectedAsync()
+    {
+        var userId = Context.User!.UserId();
+        if (await presence.ConnectedAsync(userId, Context.ConnectionId, Context.ConnectionAborted))
+            await announcer.AnnounceAsync(userId, online: true);
+        await base.OnConnectedAsync();
+    }
+
+    public override async Task OnDisconnectedAsync(Exception? exception)
+    {
+        var userId = Context.User!.UserId();
+        if (await presence.DisconnectedAsync(userId, Context.ConnectionId))
+            await announcer.AnnounceAsync(userId, online: false);
+        await base.OnDisconnectedAsync(exception);
+    }
+
     public async Task<MessageDto> SendMessage(Guid conversationId, Guid clientMsgId, string body, Guid? replyToId)
     {
         var ct = Context.ConnectionAborted;
@@ -23,7 +41,10 @@ public class ChatHub(
             CommandValidator.NormalizeBody(body, options.Value.MaxBodyLength)!, replyToId, ct);
         Fail(result.Error);
         if (result.Value!.Created)
-            await broadcaster.PublishAsync("message.created", result.Value.Message, conversationId, null, ct);
+        {
+            await presence.ClearTypingAsync(conversationId, Context.User!.UserId(), ct); // sending ends typing; clients clear on message.created
+            await broadcaster.PublishCreatedAsync(result.Value.Message, ct);
+        }
         return result.Value.Message;
     }
 
@@ -70,6 +91,39 @@ public class ChatHub(
             await broadcaster.PublishAsync(
                 "message.reaction", new { change.Value.ConversationId, MessageId = messageId, UserId = userId, Emoji = emoji, On = on },
                 change.Value.ConversationId, null, ct);
+    }
+
+    /// <summary>Marks everything up to <paramref name="upToSeq"/> as delivered to this device's user.</summary>
+    public Task MarkDelivered(Guid conversationId, long upToSeq) => AdvanceReceipt(conversationId, upToSeq, read: false);
+
+    /// <summary>Marks everything up to <paramref name="upToSeq"/> as read (which also counts as delivered).</summary>
+    public Task MarkRead(Guid conversationId, long upToSeq) => AdvanceReceipt(conversationId, upToSeq, read: true);
+
+    private async Task AdvanceReceipt(Guid conversationId, long upToSeq, bool read)
+    {
+        var ct = Context.ConnectionAborted;
+        var userId = Context.User!.UserId();
+        Fail(await validator.CheckCallerAsync(Context.User!, ct));
+        var member = await validator.CheckMemberAsync(userId, conversationId, ct);
+        Fail(member.Error);
+        if (upToSeq < 0 || upToSeq > member.Value!.Conversation.LastSeq) Fail(AuthError.Invalid);
+
+        var receipt = await receipts.AdvanceAsync(userId, conversationId, upToSeq, read, ct);
+        if (receipt is not null) await broadcaster.PublishAsync("receipt.updated", receipt, conversationId, null, ct);
+    }
+
+    /// <summary>Clients repeat <c>true</c> about every 3 seconds while typing. Over the limit, the signal is dropped, not refused.</summary>
+    public async Task SetTyping(Guid conversationId, bool typing)
+    {
+        var ct = Context.ConnectionAborted;
+        var userId = Context.User!.UserId();
+        Fail(await validator.CheckCallerAsync(Context.User!, ct));
+        Fail((await validator.CheckMemberAsync(userId, conversationId, ct)).Error);
+        if (!typingLimiter.TryAcquire(userId)) return;
+
+        if (typing) await presence.SetTypingAsync(conversationId, userId, ct);
+        else await presence.ClearTypingAsync(conversationId, userId, ct);
+        await broadcaster.PublishToOthersAsync("typing", new { ConversationId = conversationId, UserId = userId, Typing = typing }, conversationId, userId, ct);
     }
 
     private static void Fail(AuthError? error)

@@ -2,6 +2,7 @@ using Chat.Api.Auth;
 using Chat.Api.Conversations;
 using Chat.Api.Email;
 using Chat.Api.Messaging;
+using Chat.Api.Realtime;
 using Chat.Api.Users;
 using Chat.Data;
 using Chat.Data.Entities;
@@ -9,6 +10,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,7 +23,43 @@ builder.Services.AddOptions<AuthOptions>().BindConfiguration(AuthOptions.Section
     .ValidateOnStart();
 builder.Services.AddOptions<SmtpOptions>().BindConfiguration(SmtpOptions.Section);
 builder.Services.AddOptions<MessagingOptions>().BindConfiguration(MessagingOptions.Section);
-builder.Services.AddSignalR();
+builder.Services.AddOptions<RealtimeOptions>().BindConfiguration(RealtimeOptions.Section);
+
+// Redis (the SignalR backplane and D9) and RabbitMQ (durable events) are optional: without them the API runs one node
+// with in-memory presence and an in-process bus, which is what tests and a bare dev setup use.
+var redis = builder.Configuration["Redis:ConnectionString"];
+var rabbitMq = builder.Configuration["RabbitMq:Uri"];
+var signalR = builder.Services.AddSignalR();
+if (!string.IsNullOrWhiteSpace(redis))
+{
+    signalR.AddStackExchangeRedis(redis, o => o.Configuration.ChannelPrefix = RedisChannel.Literal("chat"));
+    builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
+    {
+        var options = ConfigurationOptions.Parse(redis);
+        options.AbortOnConnectFail = false; // the API starts even if Redis is still coming up
+        return ConnectionMultiplexer.Connect(options);
+    });
+    builder.Services.AddSingleton<IPresenceStore, RedisPresenceStore>();
+}
+else
+{
+    builder.Services.AddSingleton<IPresenceStore, InMemoryPresenceStore>();
+}
+if (!string.IsNullOrWhiteSpace(rabbitMq))
+{
+    builder.Services.AddSingleton(new RabbitMqSettings(rabbitMq));
+    builder.Services.AddSingleton<IEventBus, RabbitMqEventBus>();
+    builder.Services.AddHostedService<RabbitMqConsumer>();
+}
+else
+{
+    builder.Services.AddSingleton<InMemoryEventBus>();
+    builder.Services.AddSingleton<IEventBus>(sp => sp.GetRequiredService<InMemoryEventBus>());
+}
+builder.Services.AddSingleton<ConnectionRegistry>();
+builder.Services.AddSingleton<PresenceService>();
+builder.Services.AddHostedService<PresenceRefresher>();
+builder.Services.AddScoped<PresenceAudience>();
 builder.Services.AddSingleton<IUserIdProvider, SubClaimUserIdProvider>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
@@ -41,12 +79,18 @@ builder.Services.AddScoped<ConversationReader>();
 builder.Services.AddScoped<ConversationService>();
 builder.Services.AddScoped<GroupService>();
 builder.Services.AddSingleton<MessageRateLimiter>();
+builder.Services.AddSingleton<TypingRateLimiter>();
+builder.Services.AddScoped<ReceiptService>();
+builder.Services.AddScoped<PresenceAnnouncer>();
 builder.Services.AddScoped<CommandValidator>();
 builder.Services.AddScoped<MessageWriter>();
 builder.Services.AddScoped<MessageReader>();
 builder.Services.AddScoped<MessageBroadcaster>();
 
 var app = builder.Build();
+
+if (string.IsNullOrWhiteSpace(redis) || string.IsNullOrWhiteSpace(rabbitMq))
+    app.Logger.LogWarning("Redis or RabbitMQ is not configured: running as a single node with in-memory presence and events.");
 
 // Dev convenience: apply migrations on startup. Production applies them in the deploy step.
 if (app.Environment.IsDevelopment())
@@ -64,6 +108,7 @@ app.MapAuth();
 app.MapUsers();
 app.MapConversations();
 app.MapHistory();
+app.MapPresence();
 app.MapHub<ChatHub>("/hubs/chat");
 
 app.Run();

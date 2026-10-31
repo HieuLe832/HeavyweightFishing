@@ -8,7 +8,7 @@ namespace Chat.Api.Tests;
 
 public static class HubTestHelpers
 {
-    public static readonly string[] EventNames = ["message.created", "message.edited", "message.deleted", "message.reaction"];
+    public static readonly string[] EventNames = ["message.created", "message.edited", "message.deleted", "message.reaction", "receipt.updated", "typing", "presence.changed"];
 
     public static async Task<HubConnection> ConnectAsync(this ApiFixture api, Person who)
     {
