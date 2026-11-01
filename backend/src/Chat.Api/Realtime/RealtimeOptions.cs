@@ -10,6 +10,9 @@ public class RealtimeOptions
     /// <summary>How often a node renews the leases of its own connections. Must be well below the lease.</summary>
     public int RefreshSeconds { get; set; } = 20;
 
+    /// <summary>How often a node closes its hub connections whose session has ended (logout, password reset, ban).</summary>
+    public int SessionCheckSeconds { get; set; } = 20;
+
     /// <summary>How long a typing signal lasts without being repeated.</summary>
     public int TypingSeconds { get; set; } = 5;
 }

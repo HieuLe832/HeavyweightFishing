@@ -11,10 +11,12 @@ namespace Chat.Api.Messaging;
 public class ChatHub(
     CommandValidator validator, MessageWriter writer, MessageBroadcaster broadcaster,
     MessageRateLimiter limiter, IOptions<MessagingOptions> options,
-    ReceiptService receipts, PresenceService presence, PresenceAnnouncer announcer, TypingRateLimiter typingLimiter) : Hub
+    ReceiptService receipts, PresenceService presence, PresenceAnnouncer announcer, TypingRateLimiter typingLimiter,
+    SessionGuard sessions) : Hub
 {
     public override async Task OnConnectedAsync()
     {
+        sessions.Add(Context); // events go by user id, so a socket whose session ends must be closed (see SessionGuard)
         var userId = Context.User!.UserId();
         if (await presence.ConnectedAsync(userId, Context.ConnectionId, Context.ConnectionAborted))
             await announcer.AnnounceAsync(userId, online: true);
@@ -23,6 +25,7 @@ public class ChatHub(
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
+        sessions.Remove(Context.ConnectionId);
         var userId = Context.User!.UserId();
         if (await presence.DisconnectedAsync(userId, Context.ConnectionId))
             await announcer.AnnounceAsync(userId, online: false);

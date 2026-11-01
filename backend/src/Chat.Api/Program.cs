@@ -91,6 +91,8 @@ builder.Services.AddScoped<ModerationService>();
 builder.Services.AddSingleton<ConnectionRegistry>();
 builder.Services.AddSingleton<PresenceService>();
 builder.Services.AddHostedService<PresenceRefresher>();
+builder.Services.AddSingleton<SessionGuard>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<SessionGuard>());
 builder.Services.AddScoped<PresenceAudience>();
 builder.Services.AddSingleton<IUserIdProvider, SubClaimUserIdProvider>();
 builder.Services.AddSingleton(TimeProvider.System);

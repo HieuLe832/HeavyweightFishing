@@ -73,6 +73,9 @@ Things that look fine and break later. Many are pinned by tests in
   otherwise a rolled-back change is still announced. A delivery failure is logged and swallowed, since the change happened.
 - **The socket outlives the access token.** JWT validation runs only on connect, so `CommandValidator.CheckCallerAsync`
   re-reads the session and user status on every hub command. Keep it first in every new hub method.
+- **Events go by user id, not by session.** A socket whose session was revoked (logout on another device, password reset, ban)
+  would keep receiving every message, so `SessionGuard` closes each node's such connections every `Realtime:SessionCheckSeconds`
+  (20). Register new connections with it, as `ChatHub.OnConnectedAsync` does.
 - **Clear the change tracker before taking the `seq`.** The validator loads the conversation in the same scope, so its
   `last_seq` is stale once `MessageWriter` holds the lock; reusing it hands out a duplicate `seq`.
 - **Hub errors keep the `user_not_found` / `blocked` split.** The same rule as REST: do not collapse them, or a block shows.

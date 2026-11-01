@@ -1,4 +1,8 @@
+using Chat.Api.Messaging;
+using Chat.Data;
 using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using static Chat.Api.Tests.TestHelpers;
 
 namespace Chat.Api.Tests;
@@ -31,5 +35,44 @@ public class HubConnectTests(ApiFixture api) : IClassFixture<ApiFixture>
         await using var hub = api.NewHub(who.Token);
 
         await Assert.ThrowsAnyAsync<Exception>(() => hub.StartAsync());
+    }
+
+    /// <summary>Completes when the server closes the connection (the test client does not reconnect).</summary>
+    private static Task Closed(HubConnection hub)
+    {
+        var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        hub.Closed += _ => { closed.TrySetResult(); return Task.CompletedTask; };
+        return closed.Task;
+    }
+
+    [Fact]
+    public async Task Signing_out_closes_that_sessions_open_socket_within_a_check_and_no_other()
+    {
+        var who = await api.CreatePersonAsync();
+        var login = await api.Client.LoginAsync(who.Username);
+        login.EnsureSuccessStatusCode();
+        var otherDevice = who with { Token = (await login.JsonAsync()).GetProperty("accessToken").GetString()! };
+        await using var hub = await api.ConnectAsync(who);
+        await using var otherHub = await api.ConnectAsync(otherDevice);
+        var closed = Closed(hub);
+
+        (await api.Client.PostAsync(who, "/auth/logout")).EnsureSuccessStatusCode();
+        api.Time.Advance(TimeSpan.FromSeconds(21)); // one SessionGuard tick
+
+        await closed.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal(HubConnectionState.Connected, otherHub.State);
+    }
+
+    [Fact]
+    public async Task A_banned_users_open_socket_is_closed()
+    {
+        var who = await api.CreatePersonAsync();
+        await using var hub = await api.ConnectAsync(who);
+        var closed = Closed(hub);
+        await api.WithDbAsync(db => db.Users.Where(u => u.Id == who.Id).ExecuteUpdateAsync(s => s.SetProperty(u => u.Status, UserStatus.Banned)));
+
+        Assert.True(await api.Services.GetRequiredService<SessionGuard>().SweepAsync() >= 1);
+
+        await closed.WaitAsync(TimeSpan.FromSeconds(10));
     }
 }

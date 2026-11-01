@@ -267,6 +267,8 @@ Rules:
   conversation you left) is `message_not_found`. Delete is soft: the row and its `seq` stay, `body` is set to null in the
   database, and history returns a tombstone. Deleting twice does nothing.
 - **Every command re-checks the session** and that the user is active (`session_ended`), because a socket outlives its token.
+  Each node also closes, every 20 seconds (`Realtime:SessionCheckSeconds`), its open connections whose session was revoked or
+  expired or whose user is no longer active, so a logout elsewhere, a password reset or a ban stops events too.
 - **System notices** have a JSON `body`: `{"kind":"member_added","actorId","userId"}`, `member_removed` (same fields),
   `member_left` (`userId`), `renamed` (`actorId`, `title`). Role changes write none. Someone removed or leaving also receives
   the notice that ends their membership. Clients render the text.
