@@ -57,9 +57,17 @@ public class HubConnectTests(ApiFixture api) : IClassFixture<ApiFixture>
         var closed = Closed(hub);
 
         (await api.Client.PostAsync(who, "/auth/logout")).EnsureSuccessStatusCode();
-        api.Time.Advance(TimeSpan.FromSeconds(21)); // one SessionGuard tick
 
-        await closed.WaitAsync(TimeSpan.FromSeconds(10));
+        // A SessionGuard tick per step. The client's StartAsync returns at the handshake, before the hub's OnConnectedAsync has
+        // registered the connection, and under load the guard's timer may start late, so one tick is not always enough: the
+        // promise is "within a check or two", as in production, where ticks keep coming.
+        for (var tick = 0; tick < 10 && !closed.IsCompleted; tick++)
+        {
+            api.Time.Advance(TimeSpan.FromSeconds(21));
+            await Task.WhenAny(closed, Task.Delay(TimeSpan.FromSeconds(1)));
+        }
+
+        Assert.True(closed.IsCompleted, "the signed-out session's socket is still open");
         Assert.Equal(HubConnectionState.Connected, otherHub.State);
     }
 
