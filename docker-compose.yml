@@ -64,6 +64,11 @@ services:
       timeout: 3s
       retries: 10
 
+  # Optional character avatar pack (the Avatar Provider). The API runs without it; avatars then show as initials.
+  avatar-provider:
+    build: ./avatar-provider
+    ports: ["127.0.0.1:18090:80"]
+
 volumes:
   postgres-data:
   rabbitmq-data:

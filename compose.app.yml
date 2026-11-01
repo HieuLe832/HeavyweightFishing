@@ -15,6 +15,7 @@ services:
       ObjectStore__Bucket: chat-media
       Smtp__Host: mailpit
       Smtp__Port: "1025"
+      AvatarProvider__BaseUrl: http://avatar-provider   # optional: no depends_on, the API runs without it
     ports: ["127.0.0.1:5036:8080"]
     depends_on:
       postgres: { condition: service_healthy }
