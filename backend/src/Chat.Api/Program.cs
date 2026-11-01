@@ -104,6 +104,7 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<BackgroundEmailQue
 builder.Services.AddScoped<CodeService>();
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<SignInService>();
+builder.Services.AddAuthRateLimit();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
 builder.Services.ConfigureOptions<JwtBearerSetup>();
 builder.Services.AddAuthorizationBuilder()
@@ -142,6 +143,7 @@ if (app.Environment.IsDevelopment())
 app.UseCors(CorsOptions.PolicyName);
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.MapGet("/health", async (ChatDbContext db) =>
     await db.Database.CanConnectAsync() ? Results.Ok(new { status = "ok" }) : Results.StatusCode(503));

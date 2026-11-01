@@ -16,6 +16,11 @@ public class AuthOptions
     public int CodeMaxAttempts { get; set; } = 5;
     public int ResendCooldownSeconds { get; set; } = 60;
 
+    /// <summary>Calls to the anonymous auth endpoints allowed per client address and window (see <see cref="AuthRateLimit"/>).</summary>
+    public int IpLimitCount { get; set; } = 30;
+
+    public int IpLimitWindowSeconds { get; set; } = 300;
+
     public static bool IsValid(AuthOptions o) =>
         System.Text.Encoding.UTF8.GetByteCount(o.JwtKey) >= 32 && o.CodeKey.Length >= 16;
 }

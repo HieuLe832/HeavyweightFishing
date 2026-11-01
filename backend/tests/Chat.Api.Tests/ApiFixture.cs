@@ -135,6 +135,8 @@ public class ApiFixture : IAsyncLifetime
             builder.UseSetting("Auth:JwtKey", "test-jwt-key-test-jwt-key-test-jwt-key-0123456789");
             builder.UseSetting("Auth:CodeKey", "test-code-key-0123456789");
             builder.UseSetting("Media:Cleanup:Enabled", "false"); // tests run the cleanup themselves, on their clock
+            // Every test request comes from the same address, and the limiter keeps real time: AuthRateLimitTests lowers it.
+            builder.UseSetting("Auth:IpLimitCount", "1000000");
             foreach (var (key, value) in owner._settings) builder.UseSetting(key, value);
             builder.ConfigureTestServices(services =>
             {

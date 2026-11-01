@@ -162,6 +162,11 @@ Tokens: the access token is a 15-minute JWT (`sub`, `role`, `sid`). The refresh 
 `code` field. Settings live under `Auth` and `Smtp` in `appsettings.json`; `Auth:JwtKey` and
 `Auth:CodeKey` have no default outside Development.
 
+The endpoints that work without a session (register, verify, resend, both reset calls, login) share a per-address limit:
+`Auth:IpLimitCount` calls (30) per `Auth:IpLimitWindowSeconds` (300), else `429 rate_limited` with `Retry-After`. It caps how
+many accounts or codes one address can try; it does not stop a targeted lockout of one account (5 wrong passwords), which stays
+a known limit. Refresh is not limited (the token is a 256-bit secret).
+
 Emails are queued in memory and sent in the background, so a request never waits on the mail server, and the silent
 endpoints (resend, reset request) do not answer slower for an address that exists. A restart drops unsent emails; the user
 asks for a new code. For a real mail server set `Smtp:Security` (`StartTls` or `SslOnConnect`; the default `Auto` falls back

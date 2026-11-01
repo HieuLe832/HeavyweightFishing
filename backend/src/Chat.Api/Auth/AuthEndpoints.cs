@@ -9,8 +9,10 @@ public static class AuthEndpoints
     public static void MapAuth(this IEndpointRouteBuilder app)
     {
         var auth = app.MapGroup("/auth");
+        // The endpoints that need no session share a per-address limit; refresh (a 256-bit secret) and the signed-in ones do not.
+        var anonymous = auth.MapGroup("").RequireRateLimiting(AuthRateLimit.Policy);
 
-        auth.MapPost("/register", async (RegisterRequest request, AccountService accounts, CancellationToken ct) =>
+        anonymous.MapPost("/register", async (RegisterRequest request, AccountService accounts, CancellationToken ct) =>
         {
             var errors = AuthValidation.Validate(request);
             if (errors.Count > 0) return ProblemResults.Invalid(errors);
@@ -21,7 +23,7 @@ public static class AuthEndpoints
                 : Results.Created((string?)null, new { userId = result.Value });
         });
 
-        auth.MapPost("/verify-email", async (VerifyEmailRequest request, AccountService accounts, CancellationToken ct) =>
+        anonymous.MapPost("/verify-email", async (VerifyEmailRequest request, AccountService accounts, CancellationToken ct) =>
         {
             var errors = AuthValidation.Validate(request);
             if (errors.Count > 0) return ProblemResults.Invalid(errors);
@@ -30,7 +32,7 @@ public static class AuthEndpoints
             return result.Error is { } error ? ProblemResults.Problem(error) : Results.NoContent();
         });
 
-        auth.MapPost("/resend-verification", async (EmailRequest request, AccountService accounts, CancellationToken ct) =>
+        anonymous.MapPost("/resend-verification", async (EmailRequest request, AccountService accounts, CancellationToken ct) =>
         {
             var errors = AuthValidation.Validate(request);
             if (errors.Count > 0) return ProblemResults.Invalid(errors);
@@ -39,7 +41,7 @@ public static class AuthEndpoints
             return Results.Accepted();
         });
 
-        auth.MapPost("/password-reset/request", async (EmailRequest request, AccountService accounts, CancellationToken ct) =>
+        anonymous.MapPost("/password-reset/request", async (EmailRequest request, AccountService accounts, CancellationToken ct) =>
         {
             var errors = AuthValidation.Validate(request);
             if (errors.Count > 0) return ProblemResults.Invalid(errors);
@@ -48,7 +50,7 @@ public static class AuthEndpoints
             return Results.Accepted();
         });
 
-        auth.MapPost("/password-reset/confirm", async (
+        anonymous.MapPost("/password-reset/confirm", async (
             PasswordResetConfirmRequest request, AccountService accounts, CancellationToken ct) =>
         {
             var errors = AuthValidation.Validate(request);
@@ -58,7 +60,7 @@ public static class AuthEndpoints
             return result.Error is { } error ? ProblemResults.Problem(error) : Results.NoContent();
         });
 
-        auth.MapPost("/login", async (
+        anonymous.MapPost("/login", async (
             LoginRequest request, HttpContext http, SignInService signIn, CancellationToken ct) =>
         {
             var errors = AuthValidation.Validate(request);
