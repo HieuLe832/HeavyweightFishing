@@ -63,6 +63,32 @@ public class ModerationService(ChatDbContext db, AuditWriter audit, TimeProvider
             JsonSerializer.Deserialize<JsonElement>(report.Evidence));
     }
 
+    /// <summary>
+    /// Whether a file is part of a report's evidence: an attachment of the reported message, as the snapshot lists it. Admins read such a
+    /// file through <c>GET /admin/reports/{id}/media/{mediaId}</c> only, and like the evidence each read is audited (with the file id).
+    /// A file the evidence does not list is <c>media_not_found</c>, so the route cannot open other files.
+    /// </summary>
+    public async Task<AuthError?> CheckEvidenceFileAsync(Guid adminId, Guid reportId, Guid mediaId, CancellationToken ct)
+    {
+        var evidence = await db.Reports.AsNoTracking().Where(r => r.Id == reportId).Select(r => r.Evidence).SingleOrDefaultAsync(ct);
+        if (evidence is null) return AuthError.ReportNotFound;
+        if (!EvidenceFiles(evidence).Contains(mediaId)) return AuthError.MediaNotFound;
+
+        audit.Add(adminId, AuditActions.ViewEvidence, "report", reportId.ToString(), new { mediaId });
+        await db.SaveChangesAsync(ct);
+        return null;
+    }
+
+    private static HashSet<Guid> EvidenceFiles(string evidence)
+    {
+        using var json = JsonDocument.Parse(evidence);
+        if (!json.RootElement.TryGetProperty("message", out var message) || !message.TryGetProperty("attachments", out var attachments)
+            || attachments.ValueKind != JsonValueKind.Array) return [];
+        return attachments.EnumerateArray()
+            .Select(a => a.TryGetProperty("mediaId", out var id) && id.TryGetGuid(out var guid) ? guid : Guid.Empty)
+            .Where(id => id != Guid.Empty).ToHashSet();
+    }
+
     // --- 6.4 ---
 
     /// <summary>Closes an open report. <paramref name="ban"/> also bans its target, in the same transaction.</summary>

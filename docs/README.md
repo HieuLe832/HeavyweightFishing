@@ -380,7 +380,8 @@ Process 5.0 and the attachment checks of 4.1. Bytes live in the object store (D7
   (`rate_limited`, checked before the body is read). The whole request may be 64 KiB larger than `Media:MaxBytes`, for the multipart framing. The header is checked, not decoded, so an image can still be broken. Original file names are not kept.
 - **Who may read a file** (else `media_not_found`, the same answer as for a missing file): its uploader; an active member of a
   conversation with a non-deleted message that has it attached; anyone who may see a user whose avatar it is (a user who
-  blocked the viewer looks missing); an active member of a conversation whose avatar it is. Access is decided on every request,
+  blocked the viewer looks missing); an active member of a conversation whose avatar it is; an admin, only through
+  `GET /admin/reports/{id}/media/{mediaId}` and only for a file that report's evidence lists (audited). Access is decided on every request,
   so leaving a group or deleting the message ends it at once.
 - **Downloads** are sent with `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'; sandbox`,
   `Cache-Control: private`, and `Content-Disposition: inline` for images only (everything else is `attachment`).
@@ -409,6 +410,7 @@ Process 6.0. Anyone can report; everything under `/admin` is for admins. There i
 | `POST /reports` `{ messageId?, targetUserId?, reason, details? }` | 6.1. `reason` is `spam`, `harassment` or `other`; `details` at most 1000 characters. `201 { id, status, createdAt }`, or `200` with the existing report when the caller already has an open one about the same message (or user) |
 | `GET /admin/reports?status=&limit=&after=` | 6.2. A queue, oldest first; `status` `open` (default), `actioned`, `dismissed` or `all`; `limit` 1-50; `after` is the last report id. No evidence |
 | `GET /admin/reports/{id}` | 6.2. The report with its `evidence`. **Every call writes an audit entry** |
+| `GET /admin/reports/{id}/media/{mediaId}` | 6.2. A file the evidence lists (an attachment of the reported message), served like `GET /media/{id}`. Any other file is `media_not_found`. **Every call writes an audit entry** with the file id |
 | `POST /admin/reports/{id}/resolve` `{ decision: "action" \| "dismiss", ban? }` | 6.4. Open reports only (`report_resolved`); `ban: true` (with `action`) also bans the target in the same transaction |
 | `POST /admin/users/{id}/ban` `{ reason? }`, `POST /admin/users/{id}/unban` | 6.4 |
 | `GET /admin/audit?actorId=&action=&from=&to=&limit=&before=` | 6.5. Newest first, `limit` 1-100, `before` is the last entry id |

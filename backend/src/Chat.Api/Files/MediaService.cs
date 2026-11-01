@@ -71,9 +71,23 @@ public class MediaService(
     /// </summary>
     public async Task<Result<MediaDownload>> OpenAsync(Guid userId, Guid mediaId, CancellationToken ct)
     {
-        var media = await db.Media.AsNoTracking().SingleOrDefaultAsync(m => m.Id == mediaId && m.Status == MediaStatus.Ready, ct);
+        var media = await FindReadyAsync(mediaId, ct);
         if (media is null || !await CanReadAsync(userId, media, ct)) return AuthError.MediaNotFound;
+        return await DownloadAsync(media, ct);
+    }
 
+    /// <summary>
+    /// The file's bytes without the membership check, for a caller already allowed by other means: an admin reading a file that a
+    /// report's evidence lists (<see cref="Moderation.ModerationService.CheckEvidenceFileAsync"/>, which audits the read).
+    /// </summary>
+    public async Task<Result<MediaDownload>> OpenAllowedAsync(Guid mediaId, CancellationToken ct) =>
+        await FindReadyAsync(mediaId, ct) is { } media ? await DownloadAsync(media, ct) : AuthError.MediaNotFound;
+
+    private Task<Media?> FindReadyAsync(Guid mediaId, CancellationToken ct) =>
+        db.Media.AsNoTracking().SingleOrDefaultAsync(m => m.Id == mediaId && m.Status == MediaStatus.Ready, ct);
+
+    private async Task<Result<MediaDownload>> DownloadAsync(Media media, CancellationToken ct)
+    {
         var bytes = await store.GetAsync(media.StorageKey, ct);
         if (bytes is null)
         {

@@ -119,8 +119,9 @@ Things that look fine and break later. Many are pinned by tests in
   sends to members whose account is `active`. Keep that join when changing it.
 - **Reports must work through a block.** 6.1 checks membership only. Do not reuse `CommandValidator.CheckMemberAsync` for it: it refuses a
   blocker in a blocked direct chat, and that is exactly who needs to report.
-- **Evidence is read-audited.** Only `GET /admin/reports/{id}` returns evidence, and it writes `report.view_evidence`. Do not add a second
-  way to read evidence without the audit entry.
+- **Evidence is read-audited.** Only `GET /admin/reports/{id}` returns evidence, and only `GET /admin/reports/{id}/media/{mediaId}` returns
+  a file it lists; both write `report.view_evidence`. Do not add another way to read evidence without the audit entry, and do not
+  give admins a way through `GET /media/{id}`.
 - **Only `AuditWriter` inserts audit rows,** inside the caller's transaction. The log's time is the database's `now()`; the fake test
   clock does not move it.
 - **Admin role is read from the database on every admin call.** A token's `role` claim can be minutes stale.

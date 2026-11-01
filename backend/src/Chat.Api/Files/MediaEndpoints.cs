@@ -44,15 +44,7 @@ public static class MediaEndpoints
             var result = await svc.OpenAsync(me.UserId(), id, ct);
             if (result.Error is { } error) return ProblemResults.Problem(error);
 
-            var file = result.Value!;
-            var headers = http.Response.Headers;
-            headers.ETag = file.ETag;
-            headers.CacheControl = "private, max-age=3600";
-            headers["X-Content-Type-Options"] = "nosniff";
-            headers["Content-Security-Policy"] = "default-src 'none'; sandbox";
-            headers.ContentDisposition = file.Inline ? "inline" : "attachment";
-            if (http.Request.Headers.IfNoneMatch == file.ETag) return Results.StatusCode(StatusCodes.Status304NotModified);
-            return Results.Bytes(file.Content, file.MimeType == "text/plain" ? "text/plain; charset=utf-8" : file.MimeType);
+            return Serve(http, result.Value!);
         }).RequireAuthorization();
 
         app.MapPut("/users/me/avatar", async (AvatarRequest request, ClaimsPrincipal me, MediaService svc, CancellationToken ct) =>
@@ -75,6 +67,19 @@ public static class MediaEndpoints
         app.MapDelete("/conversations/{id:guid}/avatar", async (
             Guid id, ClaimsPrincipal me, GroupService groups, ConversationReader reader, CancellationToken ct) =>
             await Changed(await groups.SetAvatarAsync(me.UserId(), id, null, ct), me, id, reader, ct)).RequireAuthorization();
+    }
+
+    /// <summary>A file's bytes with the locked-down headers every download gets (see docs/pitfalls.md, "Media").</summary>
+    public static IResult Serve(HttpContext http, MediaDownload file)
+    {
+        var headers = http.Response.Headers;
+        headers.ETag = file.ETag;
+        headers.CacheControl = "private, max-age=3600";
+        headers["X-Content-Type-Options"] = "nosniff";
+        headers["Content-Security-Policy"] = "default-src 'none'; sandbox";
+        headers.ContentDisposition = file.Inline ? "inline" : "attachment";
+        if (http.Request.Headers.IfNoneMatch == file.ETag) return Results.StatusCode(StatusCodes.Status304NotModified);
+        return Results.Bytes(file.Content, file.MimeType == "text/plain" ? "text/plain; charset=utf-8" : file.MimeType);
     }
 
     private static IResult NoContent(AuthError? error) => error is null ? Results.NoContent() : ProblemResults.Problem(error);

@@ -126,6 +126,37 @@ public class AdminModerationTests(ApiFixture api) : IClassFixture<ApiFixture>
         await (await api.Client.GetAsync(admin, $"/admin/reports/{Guid.NewGuid()}")).AssertErrorAsync(HttpStatusCode.NotFound, "report_not_found");
     }
 
+    [Fact]
+    public async Task An_attachment_in_the_evidence_can_be_read_by_an_admin_and_each_read_is_audited()
+    {
+        var admin = await api.CreateAdminAsync();
+        var reporter = await api.CreatePersonAsync();
+        var abuser = await api.CreatePersonAsync();
+        var chat = await api.OpenDirectAsync(reporter, abuser);
+        var image = TestFiles.Png(5, 5);
+        var mediaId = await api.UploadedAsync(abuser, image);
+        var unrelated = await api.UploadedAsync(abuser);
+        await using var abuserHub = await api.ConnectAsync(abuser);
+        var sent = await abuserHub.SendMediaAsync(chat, [mediaId], "look");
+        var reportId = await api.ReportedMessageAsync(reporter, sent.GetProperty("id").GetGuid());
+        await abuserHub.InvokeAsync<JsonElement>("DeleteMessage", sent.GetProperty("id").GetGuid()); // evidence outlives the message
+
+        var response = await api.Client.GetAsync(admin, $"/admin/reports/{reportId}/media/{mediaId}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(image, await response.Content.ReadAsByteArrayAsync());
+        Assert.Equal("nosniff", response.Headers.GetValues("X-Content-Type-Options").Single());
+        var entry = Assert.Single(await api.AuditEntriesAsync("report.view_evidence", reportId.ToString()));
+        Assert.Equal(mediaId, JsonDocument.Parse(entry.Metadata).RootElement.GetProperty("mediaId").GetGuid());
+
+        // Only files the evidence lists, only for admins, and the ordinary download stays closed to admins.
+        await (await api.Client.GetAsync(admin, $"/admin/reports/{reportId}/media/{unrelated}")).AssertErrorAsync(HttpStatusCode.NotFound, "media_not_found");
+        await (await api.Client.GetAsync(admin, $"/admin/reports/{Guid.NewGuid()}/media/{mediaId}")).AssertErrorAsync(HttpStatusCode.NotFound, "report_not_found");
+        Assert.Equal(HttpStatusCode.Forbidden, (await api.Client.GetAsync(reporter, $"/admin/reports/{reportId}/media/{mediaId}")).StatusCode);
+        await (await api.DownloadAsync(admin, mediaId)).AssertErrorAsync(HttpStatusCode.NotFound, "media_not_found");
+        Assert.Single(await api.AuditEntriesAsync("report.view_evidence", reportId.ToString()));
+    }
+
     // --- decide ---
 
     [Fact]

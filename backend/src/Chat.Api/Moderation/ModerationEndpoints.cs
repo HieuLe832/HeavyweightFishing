@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Chat.Api.Auth;
+using Chat.Api.Files;
 using Chat.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -49,6 +50,14 @@ public static class ModerationEndpoints
         {
             var result = await svc.GetAsync(me.UserId(), id, ct);
             return result.Error is { } error ? ProblemResults.Problem(error) : Results.Ok(result.Value);
+        });
+
+        admin.MapGet("/reports/{id:guid}/media/{mediaId:guid}", async (
+            Guid id, Guid mediaId, HttpContext http, ClaimsPrincipal me, ModerationService svc, MediaService media, CancellationToken ct) =>
+        {
+            if (await svc.CheckEvidenceFileAsync(me.UserId(), id, mediaId, ct) is { } error) return ProblemResults.Problem(error);
+            var file = await media.OpenAllowedAsync(mediaId, ct);
+            return file.Error is { } missing ? ProblemResults.Problem(missing) : MediaEndpoints.Serve(http, file.Value!);
         });
 
         admin.MapPost("/reports/{id:guid}/resolve", async (Guid id, ResolveRequest request, ClaimsPrincipal me, ModerationService svc, CancellationToken ct) =>
