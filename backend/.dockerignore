@@ -1,2 +1,3 @@
-bin/
-obj/
+# Build output anywhere in the tree: a host obj/ carries a project.assets.json with host paths that breaks the restore.
+**/bin/
+**/obj/
