@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { conversationTitle, timeLabel } from "@/lib/format";
 import type { ConversationSummary } from "@/lib/types";
+import { Avatar } from "./Avatar";
 import { Bobber } from "./Bobber";
 import { Button } from "./Button";
 
@@ -28,9 +29,11 @@ export function ConversationList({ items, openId, hasMore, onLoadMore, now = new
                 c.id === openId ? "border-ink bg-paper shadow-hard-md" : "border-transparent hover:bg-butter-light"
               }`}
             >
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-3 border-ink bg-lake font-display text-xl font-extrabold" aria-hidden="true">
-                {conversationTitle(c).charAt(0).toUpperCase()}
-              </span>
+              <Avatar
+                name={conversationTitle(c)}
+                mediaId={c.type === "direct" ? c.peer?.avatarMediaId : c.avatarMediaId}
+                presetKey={c.type === "direct" ? c.peer?.avatarPresetKey : null}
+              />
               <span className="min-w-0 flex-1 truncate font-semibold">{conversationTitle(c)}</span>
               <span className="flex shrink-0 flex-col items-end gap-1 text-xs font-semibold text-ink/70">
                 <span>{timeLabel(c.updatedAt, now)}</span>

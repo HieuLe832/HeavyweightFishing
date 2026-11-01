@@ -4,7 +4,22 @@ export interface User {
   email: string;
   displayName: string;
   role: string;
+  /** An uploaded picture; never set together with `avatarPresetKey`. */
+  avatarMediaId?: string | null;
+  /** A character from the avatar pack. */
+  avatarPresetKey?: string | null;
 }
+
+/** What `POST /media` answers with. */
+export interface MediaInfo {
+  id: string;
+  mimeType: string;
+  sizeBytes: number;
+  width?: number | null;
+  height?: number | null;
+}
+
+export type AvatarChoice = { mediaId: string } | { presetKey: string };
 
 export interface AuthResponse {
   accessToken: string;
@@ -79,6 +94,13 @@ export interface Api {
   refresh(): Promise<void>;
   /** The access token now in use, for the SignalR connection (which sends it in the query string). */
   accessToken(): string | null;
+  uploadMedia(file: Blob): Promise<MediaInfo>;
+  setAvatar(choice: AvatarChoice): Promise<void>;
+  clearAvatar(): Promise<void>;
+  /** The keys of the character avatar pack. Rejects with `avatar_provider_unavailable` while the pack is down. */
+  avatarPresets(): Promise<string[]>;
+  /** A file the API serves behind the token (uploads, avatars), for an object URL. */
+  getBlob(path: string): Promise<Blob>;
 }
 
 /**
@@ -98,19 +120,25 @@ const NO_REFRESH = ["/auth/refresh", "/auth/login", "/auth/register", "/auth/ver
 export function createApi({ baseUrl, tokens, fetch: fetchFn = (...args) => fetch(...args), onSessionEnded, lock = browserLock }: ApiOptions): Api {
   let refreshing: Promise<void> | null = null;
 
-  async function send<T>(method: string, path: string, body: unknown): Promise<{ status: number; value: T | undefined }> {
+  /** One call with the current token. A FormData body goes as multipart (the browser sets its boundary), anything else as JSON. */
+  async function fetchOnce(method: string, path: string, body: unknown): Promise<Response> {
     const headers = new Headers();
-    if (body !== undefined) headers.set("Content-Type", "application/json");
+    const form = body instanceof FormData;
+    if (body !== undefined && !form) headers.set("Content-Type", "application/json");
     const access = tokens.getAccess();
     if (access) headers.set("Authorization", `Bearer ${access}`);
 
-    const response = await fetchFn(`${baseUrl}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    if (response.ok) {
-      if (response.status === 204) return { status: 204, value: undefined };
-      const text = await response.text();
-      return { status: response.status, value: text ? (JSON.parse(text) as T) : undefined };
-    }
+    const payload = body === undefined ? undefined : form ? body : JSON.stringify(body);
+    const response = await fetchFn(`${baseUrl}${path}`, { method, headers, body: payload });
+    if (response.ok) return response;
     throw await toError(response);
+  }
+
+  async function send<T>(method: string, path: string, body: unknown): Promise<{ status: number; value: T | undefined }> {
+    const response = await fetchOnce(method, path, body);
+    if (response.status === 204) return { status: 204, value: undefined };
+    const text = await response.text();
+    return { status: response.status, value: text ? (JSON.parse(text) as T) : undefined };
   }
 
   async function toError(response: Response): Promise<ApiError> {
@@ -154,9 +182,10 @@ export function createApi({ baseUrl, tokens, fetch: fetchFn = (...args) => fetch
     return refreshing;
   }
 
-  async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  /** Runs `call`; on a 401 refreshes the session once and runs it again. */
+  async function withRefresh<T>(path: string, call: () => Promise<T>): Promise<T> {
     try {
-      return (await send<T>(method, path, body)).value as T;
+      return await call();
     } catch (e) {
       if (!(e instanceof ApiError) || e.status !== 401 || NO_REFRESH.includes(path)) throw e;
       try {
@@ -164,9 +193,12 @@ export function createApi({ baseUrl, tokens, fetch: fetchFn = (...args) => fetch
       } catch {
         throw e;
       }
-      return (await send<T>(method, path, body)).value as T;
+      return await call();
     }
   }
+
+  const request = <T,>(method: string, path: string, body?: unknown): Promise<T> =>
+    withRefresh(path, async () => (await send<T>(method, path, body)).value as T);
 
   async function login(identifier: string, password: string) {
     const result = await request<AuthResponse>("POST", "/auth/login", { identifier, password });
@@ -193,5 +225,14 @@ export function createApi({ baseUrl, tokens, fetch: fetchFn = (...args) => fetch
     me: () => request<User>("GET", "/auth/me"),
     refresh,
     accessToken: () => tokens.getAccess(),
+    uploadMedia: (file) => {
+      const form = new FormData();
+      form.append("file", file);
+      return request<MediaInfo>("POST", "/media", form);
+    },
+    setAvatar: (choice) => request("PUT", "/users/me/avatar", choice),
+    clearAvatar: () => request("DELETE", "/users/me/avatar"),
+    avatarPresets: async () => (await request<{ avatars: { key: string }[] }>("GET", "/avatars")).avatars.map((a) => a.key),
+    getBlob: (path) => withRefresh(path, async () => (await fetchOnce("GET", path, undefined)).blob()),
   };
 }

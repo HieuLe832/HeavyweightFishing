@@ -5,6 +5,7 @@ export interface PersonBrief {
   username: string;
   displayName: string;
   avatarMediaId?: string | null;
+  avatarPresetKey?: string | null;
 }
 
 export interface ConversationSummary {

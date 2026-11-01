@@ -40,7 +40,7 @@ function setup(route: Route) {
   const connection = new FakeConnection();
   const request = vi.fn(async (method: string, path: string) => route(method, path));
   const api = { request, accessToken: () => "tok", refresh: vi.fn(async () => {}) } as unknown as Api;
-  const auth = { user: { id: ME, username: "me", email: "me@example.com", displayName: "Me", role: "user" }, ready: true, api, login: vi.fn(), logout: vi.fn() } as AuthValue;
+  const auth = { user: { id: ME, username: "me", email: "me@example.com", displayName: "Me", role: "user" }, ready: true, api, login: vi.fn(), logout: vi.fn(), reloadUser: vi.fn() } as AuthValue;
   const latest: { chat: ChatValue } = { chat: undefined as unknown as ChatValue };
   function Probe() {
     latest.chat = useChat();

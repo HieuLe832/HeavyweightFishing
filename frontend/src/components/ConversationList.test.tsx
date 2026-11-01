@@ -1,6 +1,8 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import type { Api } from "@/lib/api";
+import { AuthContext, type AuthValue } from "@/lib/auth";
 import type { ConversationSummary } from "@/lib/types";
 import { ConversationList } from "./ConversationList";
 
@@ -49,5 +51,20 @@ describe("ConversationList", () => {
 
     rerender(<ConversationList items={[conv("a")]} openId={null} now={NOW} hasMore={false} onLoadMore={onLoadMore} />);
     expect(screen.queryByRole("button", { name: /show more/i })).not.toBeInTheDocument();
+  });
+  it("shows a direct chat's peer avatar and a group's own", async () => {
+    URL.createObjectURL = vi.fn(() => "blob:test/1");
+    const getBlob = vi.fn(async () => new Blob(["x"]));
+    const auth = { user: null, ready: true, api: { getBlob } as unknown as Api } as unknown as AuthValue;
+    const items = [
+      conv("a", { peer: { id: "pa", username: "ua", displayName: "Peer a", avatarPresetKey: "07-curly-blond" } }),
+      conv("g", { type: "group", title: "Crew", peer: null, avatarMediaId: "m9" }),
+    ];
+
+    render(<AuthContext.Provider value={auth}><ConversationList items={items} openId={null} now={NOW} hasMore={false} onLoadMore={vi.fn()} /></AuthContext.Provider>);
+
+    await vi.waitFor(() => expect(getBlob).toHaveBeenCalledTimes(2));
+    expect(getBlob).toHaveBeenCalledWith("/avatars/07-curly-blond");
+    expect(getBlob).toHaveBeenCalledWith("/media/m9");
   });
 });

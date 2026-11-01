@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { createApi, createLocalTokenStore, type Api, type User } from "./api";
+import { clearAuthedImages } from "./authed-image";
 import { config } from "./config";
 
 export interface AuthValue {
@@ -11,6 +12,8 @@ export interface AuthValue {
   api: Api;
   login(identifier: string, password: string): Promise<void>;
   logout(): Promise<void>;
+  /** Re-reads the signed-in user, after a profile change such as a new avatar. */
+  reloadUser(): Promise<void>;
 }
 
 export const AuthContext = createContext<AuthValue | null>(null);
@@ -25,7 +28,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(false);
   const [tokens] = useState(createLocalTokenStore);
-  const api = useMemo(() => createApi({ baseUrl: config.apiUrl, tokens, onSessionEnded: () => setUser(null) }), [tokens]);
+  const api = useMemo(() => {
+    const onSessionEnded = () => {
+      clearAuthedImages();
+      setUser(null);
+    };
+    return createApi({ baseUrl: config.apiUrl, tokens, onSessionEnded });
+  }, [tokens]);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,9 +62,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     await api.logout();
+    clearAuthedImages();
     setUser(null);
   }, [api]);
 
-  const value = useMemo(() => ({ user, ready, api, login, logout }), [user, ready, api, login, logout]);
+  const reloadUser = useCallback(async () => {
+    setUser(await api.me());
+  }, [api]);
+
+  const value = useMemo(() => ({ user, ready, api, login, logout, reloadUser }), [user, ready, api, login, logout, reloadUser]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

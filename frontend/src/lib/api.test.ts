@@ -264,3 +264,53 @@ describe("createLocalTokenStore", () => {
     expect(localStorage.getItem("refreshToken")).toBeNull();
   });
 });
+
+describe("avatars and files", () => {
+  it("uploads a file as multipart form data, leaving the content type to the browser", async () => {
+    const { api, calls } = setup(() => json(201, { id: "m1", mimeType: "image/png", sizeBytes: 3 }));
+    const file = new File([new Uint8Array([1, 2, 3])], "me.png", { type: "image/png" });
+
+    const result = await api.uploadMedia(file);
+
+    expect(result).toEqual({ id: "m1", mimeType: "image/png", sizeBytes: 3 });
+    expect(calls[0].url).toBe("http://api.test/media");
+    expect(calls[0].init.method).toBe("POST");
+    expect(header(calls[0].init, "Authorization")).toBe("Bearer access-1");
+    expect(header(calls[0].init, "Content-Type")).toBeNull();
+    expect((calls[0].init.body as FormData).get("file")).toBeInstanceOf(File);
+  });
+
+  it("fetches a blob with the token, refreshing once on 401", async () => {
+    let first = true;
+    const { api, calls } = setup((url) => {
+      if (url.endsWith("/auth/refresh")) return json(200, auth(2));
+      if (first) {
+        first = false;
+        return json(401, { code: "unauthorized" });
+      }
+      return new Response(new Uint8Array([7, 8]), { status: 200, headers: { "Content-Type": "image/webp" } });
+    });
+
+    const blob = await api.getBlob("/avatars/01-a");
+
+    expect(blob.size).toBe(2);
+    expect(calls.map((c) => c.url)).toEqual(["http://api.test/avatars/01-a", "http://api.test/auth/refresh", "http://api.test/avatars/01-a"]);
+    expect(header(calls[2].init, "Authorization")).toBe("Bearer access-2");
+  });
+
+  it("sets, clears and lists avatars", async () => {
+    const { api, calls } = setup((url, init) =>
+      url.endsWith("/avatars") && init.method === "GET" ? json(200, { avatars: [{ key: "01-a" }, { key: "02-b" }] }) : json(204));
+
+    await api.setAvatar({ presetKey: "01-a" });
+    await api.clearAvatar();
+    const keys = await api.avatarPresets();
+
+    expect(calls[0].init.method).toBe("PUT");
+    expect(calls[0].url).toBe("http://api.test/users/me/avatar");
+    expect(calls[0].init.body).toBe(JSON.stringify({ presetKey: "01-a" }));
+    expect(calls[1].init.method).toBe("DELETE");
+    expect(calls[1].url).toBe("http://api.test/users/me/avatar");
+    expect(keys).toEqual(["01-a", "02-b"]);
+  });
+});
