@@ -2,6 +2,7 @@ using System.Text.Json;
 using Chat.Data;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using static Chat.Api.Tests.HubTestHelpers;
 using static Chat.Api.Tests.TestHelpers;
 
@@ -152,6 +153,26 @@ public class SendMessageTests(ApiFixture api) : IClassFixture<ApiFixture>
         await AssertHubErrorAsync(() => SendAsync(strangerHub, chat, "hi"), "conversation_not_found");
         await AssertHubErrorAsync(() => SendAsync(memberHub, chat, "hi"), "conversation_not_found");
         await AssertHubErrorAsync(() => SendAsync(strangerHub, Guid.NewGuid(), "hi"), "conversation_not_found");
+    }
+
+    /// <summary>
+    /// The validator runs before the conversation lock, so a member removed in between reaches the writer. The writer checks again
+    /// under the lock, which is what this calls directly.
+    /// </summary>
+    [Fact]
+    public async Task A_member_removed_after_the_check_still_cannot_store_a_message()
+    {
+        var owner = await api.CreatePersonAsync();
+        var member = await api.CreatePersonAsync();
+        var chat = await api.CreateGroupAsync(owner, member);
+        (await api.Client.DeleteAsync(owner, $"/conversations/{chat}/members/{member.Id}")).EnsureSuccessStatusCode();
+
+        await using var scope = api.Services.CreateAsyncScope();
+        var writer = scope.ServiceProvider.GetRequiredService<Chat.Api.Messaging.MessageWriter>();
+        var result = await writer.SendAsync(member.Id, chat, Guid.NewGuid(), "slipped in", null, null, CancellationToken.None);
+
+        Assert.Equal("conversation_not_found", result.Error?.Code);
+        Assert.False(await api.WithDbAsync(db => db.Messages.AnyAsync(m => m.ConversationId == chat && m.SenderId == member.Id)));
     }
 
     [Fact]

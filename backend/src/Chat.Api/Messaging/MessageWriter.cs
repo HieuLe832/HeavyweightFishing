@@ -59,6 +59,10 @@ public class MessageWriter(ChatDbContext db, TimeProvider time)
         // A concurrent retry may have stored it while we waited for the lock.
         if (await FindExistingAsync(senderId, conversationId, clientMsgId, ct) is { } raced) return raced;
 
+        // The validator checked membership before the lock; a removal or leave may have committed since, and it holds the same lock.
+        var member = await db.ConversationMembers.SingleOrDefaultAsync(m => m.ConversationId == conversationId && m.UserId == senderId && m.LeftAt == null, ct);
+        if (member is null) return AuthError.ConversationNotFound;
+
         var now = time.GetUtcNow();
         var conversation = await db.Conversations.SingleAsync(c => c.Id == conversationId, ct);
         conversation.LastSeq++;
@@ -73,7 +77,6 @@ public class MessageWriter(ChatDbContext db, TimeProvider time)
             db.MessageAttachments.Add(new MessageAttachment { MessageId = message.Id, MediaId = attachments![i].Id, Position = (short)i });
 
         // The sender has read their own message; everyone else's cursors wait for 4.5.
-        var member = await db.ConversationMembers.SingleAsync(m => m.ConversationId == conversationId && m.UserId == senderId, ct);
         member.LastReadSeq = member.LastDeliveredSeq = message.Seq;
 
         try
