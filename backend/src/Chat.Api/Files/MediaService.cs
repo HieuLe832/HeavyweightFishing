@@ -23,14 +23,16 @@ public class MediaService(
     ChatDbContext db, IObjectStore store, UserAccess access, IOptions<MediaOptions> options, UploadRateLimiter limiter,
     TimeProvider time, ILogger<MediaService> log)
 {
+    /// <summary>Takes one upload from the caller's allowance. The endpoint asks before it reads the request body.</summary>
+    public bool TryStartUpload(Guid userId) => limiter.TryAcquire(userId);
+
     /// <summary>
     /// Checks the bytes (size, then type from the content), writes them to the object store and records the metadata.
-    /// <paramref name="declaredLength"/> lets an oversize upload be refused without reading it.
+    /// <paramref name="declaredLength"/> lets an oversize upload be refused without reading it. Call <see cref="TryStartUpload"/> first.
     /// </summary>
     public async Task<Result<MediaInfo>> UploadAsync(Guid userId, Stream content, long? declaredLength, CancellationToken ct)
     {
         var max = options.Value.MaxBytes;
-        if (!limiter.TryAcquire(userId)) return AuthError.RateLimited;
         if (declaredLength > max) return AuthError.FileTooLarge;
 
         using var buffer = new MemoryStream();

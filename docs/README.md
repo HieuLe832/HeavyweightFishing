@@ -368,7 +368,7 @@ Process 5.0 and the attachment checks of 4.1. Bytes live in the object store (D7
 - **Upload checks.** Up to 10 MiB (`file_too_large`, 413). The type comes from the bytes, not from the client:
   PNG, JPEG, GIF, WebP (with width and height), PDF, and UTF-8 plain text; anything else is `unsupported_media_type` (415).
   There is no SVG or HTML type: markup is stored as `text/plain` and never rendered. 20 uploads per minute per user
-  (`rate_limited`). The header is checked, not decoded, so an image can still be broken. Original file names are not kept.
+  (`rate_limited`, checked before the body is read). The whole request may be 64 KiB larger than `Media:MaxBytes`, for the multipart framing. The header is checked, not decoded, so an image can still be broken. Original file names are not kept.
 - **Who may read a file** (else `media_not_found`, the same answer as for a missing file): its uploader; an active member of a
   conversation with a non-deleted message that has it attached; anyone who may see a user whose avatar it is (a user who
   blocked the viewer looks missing); an active member of a conversation whose avatar it is. Access is decided on every request,

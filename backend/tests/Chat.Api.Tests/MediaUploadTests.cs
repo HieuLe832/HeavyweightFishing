@@ -2,9 +2,12 @@ using System.Net;
 using System.Security.Cryptography;
 using Chat.Api.Files;
 using Chat.Data;
+using Microsoft.AspNetCore.Http.Metadata;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using static Chat.Api.Tests.HubTestHelpers;
 using static Chat.Api.Tests.TestHelpers;
 
@@ -102,6 +105,33 @@ public class MediaUploadTests(ApiFixture api) : IClassFixture<ApiFixture>
 
         await (await api.Client.UploadAsync(who, TestFiles.Text("one too many"))).AssertErrorAsync((HttpStatusCode)429, "rate_limited");
         Assert.Equal(HttpStatusCode.Created, (await api.Client.UploadAsync(other, TestFiles.Text("someone else"))).StatusCode);
+    }
+
+    [Fact]
+    public async Task The_rate_limit_is_checked_before_the_body_is_read()
+    {
+        var who = await api.CreatePersonAsync();
+        api.Time.Advance(TimeSpan.FromMinutes(5)); // an empty window
+        for (var i = 0; i < 20; i++) Assert.Equal(HttpStatusCode.Created, (await api.Client.UploadAsync(who, TestFiles.Text($"note {i}"))).StatusCode);
+
+        // No part named file: had the form been read first, this would be a validation error.
+        using var form = new MultipartFormDataContent { { new ByteArrayContent([1, 2, 3]), "other", "x.bin" } };
+        using var request = Authed(HttpMethod.Post, "/media", who.Token);
+        request.Content = form;
+
+        await (await api.Client.SendAsync(request)).AssertErrorAsync((HttpStatusCode)429, "rate_limited");
+    }
+
+    [Fact]
+    public void The_request_size_limit_is_the_file_limit_plus_room_for_the_multipart_framing()
+    {
+        var endpoint = api.Services.GetRequiredService<EndpointDataSource>().Endpoints.OfType<RouteEndpoint>()
+            .Single(e => e.RoutePattern.RawText == "/media" && e.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods.Contains("POST"));
+        var max = api.Services.GetRequiredService<IOptions<MediaOptions>>().Value.MaxBytes;
+
+        var limit = endpoint.Metadata.GetMetadata<IRequestSizeLimitMetadata>()!.MaxRequestBodySize;
+
+        Assert.InRange(limit!.Value, max + 1, max + 1024 * 1024);
     }
 
     [Fact]

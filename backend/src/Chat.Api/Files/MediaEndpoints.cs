@@ -10,19 +10,24 @@ public record AvatarRequest(Guid? MediaId);
 
 public static class MediaEndpoints
 {
+    /// <summary>Room for the multipart boundaries and part headers around the file.</summary>
+    private const long MultipartAllowance = 64 * 1024;
+
     public static void MapMedia(this IEndpointRouteBuilder app)
     {
         // The API reads the whole file to check it, so the request limit is the file limit plus room for the multipart framing.
-        app.MapPost("/media", async (
-            HttpRequest request, ClaimsPrincipal me, MediaService svc, IOptions<MediaOptions> options, CancellationToken ct) =>
+        var maxRequest = app.ServiceProvider.GetRequiredService<IOptions<MediaOptions>>().Value.MaxBytes + MultipartAllowance;
+        app.MapPost("/media", async (HttpRequest request, ClaimsPrincipal me, MediaService svc, CancellationToken ct) =>
         {
+            // Before the body is read: a caller over the limit must not get to stream another file in.
+            if (!svc.TryStartUpload(me.UserId())) return ProblemResults.Problem(AuthError.RateLimited);
             if (!request.HasFormContentType) return ProblemResults.Invalid(new() { ["file"] = ["Send multipart/form-data with a part named file."] });
             IFormCollection form;
             try
             {
                 form = await request.ReadFormAsync(ct);
             }
-            catch (InvalidDataException)
+            catch (Exception e) when (e is InvalidDataException or BadHttpRequestException { StatusCode: StatusCodes.Status413PayloadTooLarge })
             {
                 return ProblemResults.Problem(AuthError.FileTooLarge);
             }
@@ -32,7 +37,7 @@ public static class MediaEndpoints
             var result = await svc.UploadAsync(me.UserId(), stream, file.Length, ct);
             return result.Error is { } error ? ProblemResults.Problem(error) : Results.Created($"/media/{result.Value!.Id}", result.Value);
         }).RequireAuthorization().DisableAntiforgery()
-          .WithMetadata(new RequestSizeLimitAttribute(100 * 1024 * 1024)).WithMetadata(new RequestFormLimitsAttribute { MultipartBodyLengthLimit = 100 * 1024 * 1024 });
+          .WithMetadata(new RequestSizeLimitAttribute(maxRequest)).WithMetadata(new RequestFormLimitsAttribute { MultipartBodyLengthLimit = maxRequest });
 
         app.MapGet("/media/{id:guid}", async (Guid id, HttpContext http, ClaimsPrincipal me, MediaService svc, CancellationToken ct) =>
         {
