@@ -1,0 +1,31 @@
+services:
+  api:
+    build: ./backend
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development   # tự chạy migration khi khởi động
+      ConnectionStrings__Chat: Host=postgres;Port=5432;Database=chat;Username=chat;Password=chat
+      Auth__JwtKey: ${JWT_KEY:?set JWT_KEY in .env}
+      Auth__CodeKey: ${CODE_KEY:?set CODE_KEY in .env}
+      Cors__AllowedOrigins__0: http://localhost:3000
+      Redis__ConnectionString: redis:6379
+      RabbitMq__Uri: amqp://chat:chat@rabbitmq:5672
+      ObjectStore__Endpoint: http://objectstore:9000
+      ObjectStore__AccessKey: chat
+      ObjectStore__SecretKey: chat-secret
+      ObjectStore__Bucket: chat-media
+      Smtp__Host: mailpit
+      Smtp__Port: "1025"
+    ports: ["127.0.0.1:5036:8080"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+      mailpit: { condition: service_healthy }
+      objectstore: { condition: service_started }
+
+  web:
+    build:
+      context: ./frontend
+      args: { NEXT_PUBLIC_API_URL: http://localhost:5036 }   # địa chỉ trình duyệt dùng để gọi API
+    ports: ["127.0.0.1:3000:3000"]
+    depends_on: [api]
