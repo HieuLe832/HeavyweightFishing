@@ -142,6 +142,10 @@ Things that look fine and break later. Many are pinned by tests in
 - **`invalid_attachment` hides who owns what.** A missing file and someone else's file give the same error.
 - **Deleting a message does not delete the bytes at once.** Rows and objects stay until `MediaCleanupService` removes files nothing uses
   after `Media:Cleanup:GraceDays`. A file on a reported message is never removed: the report's evidence lists it.
+- **A user has one avatar.** `users.avatar_media_id` and `users.avatar_preset_key` exclude each other (`ck_users_one_avatar`):
+  anything that sets one must clear the other in the same statement, as `MediaService.SetUserAvatarAsync` does.
+- **Never clear a preset key because the Avatar Provider failed.** It is optional and may be down or have dropped a key; the key
+  is the user's choice and shows again when the provider does. `AvatarCatalog` caches only good catalogs, never images.
 - **`Chat.Api.Media` would clash with the `Media` entity,** so the code is in `Chat.Api.Files`.
 - **S3-compatible stores and checksums.** `S3ObjectStore` turns off the SDK's default checksum trailers (`WHEN_REQUIRED`) because
   RustFS-style servers do not all support them.

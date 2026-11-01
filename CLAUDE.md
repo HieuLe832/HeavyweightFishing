@@ -29,7 +29,8 @@ A chat app whose frontend look is derived from the Vietnamese fishing game *Câu
   `Chat.Data` (entities, EF configuration, migrations), `Chat.Api`, `Chat.Data.Tests`, `Chat.Api.Tests`.
 - **Frontend:** TypeScript, Next.js (App Router), Tailwind. In `frontend/`.
 - **Infrastructure:** `docker-compose.yml` runs PostgreSQL 17, Redis (D9 and the real-time backplane),
-  RabbitMQ (fan-out, push, email), an S3-compatible object store (D7 bytes), and Mailpit (dev email).
+  RabbitMQ (fan-out, push, email), an S3-compatible object store (D7 bytes), Mailpit (dev email), and the optional
+  `avatar-provider` (the character avatar pack; the API runs without it, see "Avatar Provider" in the README).
   Backend and frontend run on the host during development.
 - Any other stack is fine if it runs from Docker.
 
@@ -55,9 +56,9 @@ After changing entities, add a migration:
 ## Next steps
 
 1. Chat UI, next slices (slice 1, the core chat loop, is done; see `docs/superpowers/specs/2026-10-31-chat-ui-core-design.md`): contacts and
-   blocking, starting direct and group chats, attachments and avatars, typing and presence, reactions, edit and delete, mute, reports,
+   blocking, starting direct and group chats, attachments and group avatars (your own avatar and the profile card are done), typing and presence, reactions, edit and delete, mute, reports,
    settings, password reset, and a web push subscription (the Web Push sender expects the token format in "API: push").
 
 Skipped for now: Sign in with Google (1.6). Done: every backend process except 1.6 (push providers are built but untested against real devices, see "API: push"): 1.1-1.5, 1.7, 2.0, 3.0,
-4.0 (4.1-4.6, with the Redis backplane, presence, RabbitMQ hand-off, receipts and typing), 5.0 (upload, attachments, avatars, media cleanup job)
+4.0 (4.1-4.6, with the Redis backplane, presence, RabbitMQ hand-off, receipts and typing), 5.0 (upload, attachments, avatars, character avatars from the Avatar Provider, media cleanup job)
 and 6.0 (reports, bans, audit log); see the "API: …" sections in `docs/README.md`. Design specs are in `docs/superpowers/specs/`.

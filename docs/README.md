@@ -46,6 +46,7 @@ The ERD uses **crow's-foot** notation. Each table's header colour matches the DF
 | Google Identity | "Sign in with Google" (OAuth 2.0 / OpenID Connect code exchange) |
 | Email Service | Verification and password-reset emails |
 | Push Notification Service | New-message alerts for users with no live connection (FCM, APNs, Web Push) |
+| Avatar Provider | Optional character avatar pack: a catalog and the images. The system runs without it; avatars then show as initials |
 
 ## 2. DFD level 1
 
@@ -57,7 +58,7 @@ The ERD uses **crow's-foot** notation. Each table's header colour matches the DF
 | 2.0 Manage Profile & Contacts | Profile edits, user search, contact list, blocking |
 | 3.0 Manage Conversations | Direct chats and groups, members and roles, rename, leave |
 | 4.0 Exchange Messages | Send, edit and react; real-time delivery; receipts, typing, presence; history; push |
-| 5.0 Manage Media | Upload, validate and serve files for attachments and avatars. Decides who may read a file (uploader, members, blocks, live messages), sets user and group avatars, and removes files nothing uses, keeping those a report lists |
+| 5.0 Manage Media | Upload, validate and serve files for attachments and avatars. Decides who may read a file (uploader, members, blocks, live messages), sets user and group avatars, serves character avatars from the Avatar Provider, and removes files nothing uses, keeping those a report lists |
 | 6.0 Moderate & Audit | Abuse reports, bans (which revoke sessions), audit log |
 
 | Store | Holds | Tables (see ERD) |
@@ -200,7 +201,9 @@ Rules:
 - Banned and pending users are invisible to lookups and search. You can still list and remove a block on a
   banned user.
 - Contacts are private and one-way: adding someone does not add you to their list.
-- Profiles carry `avatarMediaId`; set it with `PUT /users/me/avatar` (see [API: media](#api-media)).
+- Profiles carry `avatarMediaId` (an upload) and `avatarPresetKey` (a character from the Avatar Provider); at most one is set. Set
+  them with `PUT /users/me/avatar` (see [API: media](#api-media)). The summary from `/auth/me`, login and `PATCH /users/me` carries
+  both, so a client knows its own avatar.
 
 ## API: conversations
 
@@ -374,7 +377,9 @@ Process 5.0 and the attachment checks of 4.1. Bytes live in the object store (D7
 |-------|------|
 | `POST /media` | `multipart/form-data`, one part named `file`. `201 { id, mimeType, sizeBytes, width?, height? }` |
 | `GET /media/{id}` | The bytes, if the caller may read them (below). Supports `If-None-Match` (the ETag is the SHA-256) |
-| `PUT /users/me/avatar` `{ mediaId }`, `DELETE /users/me/avatar` | Own avatar |
+| `PUT /users/me/avatar` `{ mediaId }` or `{ presetKey }`, `DELETE /users/me/avatar` | Own avatar: exactly one field, else `validation_failed`. Setting one clears the other; `DELETE` clears both |
+| `GET /avatars` | The character pack: `{ avatars: [{ key }] }` |
+| `GET /avatars/{key}` | A character's image, from the Avatar Provider |
 | `PUT /conversations/{id}/avatar` `{ mediaId }`, `DELETE …` | A group's avatar, owners and admins (`not_a_group` for a direct chat, no system notice) |
 
 - **Upload checks.** Up to 10 MiB (`file_too_large`, 413). The type comes from the bytes, not from the client:
@@ -394,6 +399,16 @@ Process 5.0 and the attachment checks of 4.1. Bytes live in the object store (D7
   A deleted message shows no attachments, and its files stop being readable by other members (the bytes stay until the cleanup job below removes them).
 - **Avatars** must be a ready image the caller uploaded (`unsupported_media_type` / `media_not_found`). Replacing one leaves the
   old file until the cleanup job removes it. `avatarMediaId` appears in profiles, conversation summaries, `peer` and member lists.
+- **Avatar Provider.** An optional external entity holding the character pack (`avatar-provider/`, `127.0.0.1:18090` in Compose).
+  Its contract: `GET /catalog.json` → `{ avatars: [{ key, file }] }` and `GET /{file}`. Keys match `^[a-z0-9-]{1,64}$`; entries
+  that do not, or whose file is not a plain name, are skipped. The API keeps only the key a user picked (`users.avatar_preset_key`)
+  and proxies the image, so the provider's address stays internal. The catalog is cached for `AvatarProvider:CatalogCacheSeconds`
+  (60) after a good read; images are never cached on the server (`Cache-Control: private, max-age=300` for browsers). Provider down,
+  slow (`TimeoutSeconds`, 2) or answering garbage: `503 avatar_provider_unavailable` for the list, the image and picking. A key
+  not in the catalog: `404 avatar_not_found`. Bytes checked like an upload (PNG, JPEG, GIF, WebP, at most `MaxBytes`, 2 MiB), else
+  `502 avatar_provider_invalid`; images get the same locked-down headers as `/media`. A stored key is never cleared: when the
+  provider comes back, the avatar shows again. Without `AvatarProvider:BaseUrl` the feature is off: the list is empty and
+  picking is `503`.
 - **Object store.** `ObjectStore:Endpoint` (with `AccessKey`, `SecretKey`, `Bucket`) selects the S3 store (RustFS in Compose,
   bucket created on first use); without it files are kept in memory and the API warns at start.
 - **Cleanup.** A background job (`MediaCleanupService`) removes files nothing uses: older than `Media:Cleanup:GraceDays` (7), not an
