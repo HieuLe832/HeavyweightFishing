@@ -23,7 +23,7 @@ public class InMemoryEventBus(IEnumerable<IBusHandler> handlers, ILogger<InMemor
             {
                 await handler.HandleAsync(bytes, ct);
             }
-            catch (Exception e) when (e is not OperationCanceledException)
+            catch (Exception e) when (!ct.IsCancellationRequested)
             {
                 log.LogError(e, "Handler {Handler} failed for {RoutingKey}", handler.Name, routingKey);
             }

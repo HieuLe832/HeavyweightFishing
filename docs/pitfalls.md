@@ -103,6 +103,9 @@ Things that look fine and break later. Many are pinned by tests in
   may have sat in a queue. Do not trust `offlineUserIds` as a final answer.
 - **Push is best effort and has no retry.** Retrying the event re-notifies devices that already got it. Clear tokens the provider
   rejects; do not throw for a single bad device.
+- **A timeout is a `TaskCanceledException`.** HttpClient reports its timeout as an `OperationCanceledException`, so a filter like
+  `when (e is not OperationCanceledException)` lets a slow provider escape. In a RabbitMQ handler that leaves the message
+  unacknowledged, and after `prefetch` of them the consumer stops. Filter on the token: `when (!ct.IsCancellationRequested)`.
 - **A push preview leaves the system.** The text goes to FCM / APNs / Web Push. Do not add more than the 100-character preview, and
   do not log it.
 - **The per-user rate limiters are per node.** With several nodes the real limit is the limit times the node count.

@@ -49,11 +49,19 @@ public class RabbitMqBusTests
     }
 
     [Fact]
-    public async Task A_handler_that_throws_sends_the_message_to_the_dead_letter_queue()
+    public Task A_handler_that_throws_sends_the_message_to_the_dead_letter_queue() =>
+        AssertDeadLetteredAsync(() => new InvalidOperationException("poison"));
+
+    /// <summary>An HttpClient timeout is a TaskCanceledException; it must not leave the message unacknowledged (which stalls the consumer).</summary>
+    [Fact]
+    public Task A_handler_that_times_out_sends_the_message_to_the_dead_letter_queue() =>
+        AssertDeadLetteredAsync(() => new TaskCanceledException("timed out", new TimeoutException()));
+
+    private static async Task AssertDeadLetteredAsync(Func<Exception> failure)
     {
         var settings = new RabbitMqSettings(await SharedRabbitMq.UriAsync());
         var key = "test." + Guid.NewGuid().ToString("N");
-        var handler = new TestHandler("bad-" + Guid.NewGuid().ToString("N"), key, _ => throw new InvalidOperationException("poison"));
+        var handler = new TestHandler("bad-" + Guid.NewGuid().ToString("N"), key, _ => throw failure());
         await using var bus = new RabbitMqEventBus(settings);
         using var consumer = new RabbitMqConsumer(settings, [handler], NullLogger<RabbitMqConsumer>.Instance);
         await consumer.StartAsync(CancellationToken.None);

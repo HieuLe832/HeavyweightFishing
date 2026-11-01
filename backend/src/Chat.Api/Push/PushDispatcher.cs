@@ -62,7 +62,8 @@ public class PushDispatcher(IServiceScopeFactory scopes, IEnumerable<IPushSender
             {
                 if (await transport.SendAsync(notification, session.PushToken!, ct) == PushResult.InvalidToken) dead.Add(session.Id);
             }
-            catch (Exception e) when (e is not OperationCanceledException)
+            // Not `e is not OperationCanceledException`: an HttpClient timeout is a TaskCanceledException, and it is a failed device.
+            catch (Exception e) when (!ct.IsCancellationRequested)
             {
                 log.LogWarning(e, "Push to session {SessionId} failed", session.Id);
             }

@@ -165,6 +165,27 @@ public class PushTests(ApiFixture api) : IClassFixture<ApiFixture>
         Assert.Contains(good, stored);
     }
 
+    [Fact]
+    public async Task A_device_whose_provider_times_out_does_not_stop_the_others_or_the_cleanup()
+    {
+        var (_, receiver, chat, dead, senderHub) = await OfflineReceiverAsync();
+        var phone = await SecondDeviceAsync(receiver);
+        var slow = NewToken();
+        await RegisterAsync(phone, slow);
+        var tablet = await SecondDeviceAsync(receiver);
+        var good = NewToken();
+        await RegisterAsync(tablet, good);
+        api.Push.Results[dead] = PushResult.InvalidToken;
+        api.Push.TimingOut[slow] = true;
+
+        await SendMessageTests.SendAsync(senderHub, chat, "one");
+
+        Assert.Single(api.Push.To(good));
+        var stored = await api.WithDbAsync(db => db.Sessions.Where(s => s.UserId == receiver.Id).Select(s => s.PushToken).ToListAsync());
+        Assert.DoesNotContain(dead, stored);
+        Assert.Contains(slow, stored); // a timeout is not a dead token
+    }
+
     // --- registering a device ---
 
     [Fact]

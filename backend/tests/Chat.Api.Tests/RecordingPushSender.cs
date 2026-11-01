@@ -15,6 +15,9 @@ public sealed class RecordingPushSender
     public ConcurrentDictionary<string, PushResult> Results { get; } = new();
     public ConcurrentDictionary<string, bool> Failing { get; } = new();
 
+    /// <summary>Tokens whose provider times out: HttpClient reports that as a TaskCanceledException, not as a cancelled request.</summary>
+    public ConcurrentDictionary<string, bool> TimingOut { get; } = new();
+
     public IPushSender For(PushPlatform platform) => new PlatformSender(this, platform);
 
     public IReadOnlyList<SentPush> To(string token) => _sent.Where(s => s.Token == token).ToList();
@@ -26,6 +29,7 @@ public sealed class RecordingPushSender
         public Task<PushResult> SendAsync(PushMessage message, string token, CancellationToken ct)
         {
             if (owner.Failing.ContainsKey(token)) throw new HttpRequestException("provider down");
+            if (owner.TimingOut.ContainsKey(token)) throw new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout.", new TimeoutException());
             owner._sent.Enqueue(new SentPush(platform, token, message));
             return Task.FromResult(owner.Results.GetValueOrDefault(token, PushResult.Sent));
         }

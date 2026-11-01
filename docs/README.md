@@ -342,7 +342,7 @@ above) and notifies each of their devices.
   Keep keys out of source control: set them with environment variables (`Push__Apns__KeyId`) or user secrets.
   **Delivery to real devices has not been tested**, because no credentials exist in the repo: the senders are tested against
   fake servers (request shape, signatures, and how each provider answer maps to a result).
-- **Best effort:** a failed device is logged and skipped, with no retry (a retry would re-notify the devices that succeeded). A
+- **Best effort:** each provider call times out after 10 seconds. A failed device is logged and skipped, with no retry (a retry would re-notify the devices that succeeded). A
   provider answer that the token is dead (`InvalidToken`: FCM `UNREGISTERED`, APNs 410 or `BadDeviceToken`, Web Push 404 or 410, or a
   Web token that does not decode) clears that session's token; every other failure keeps it. Only an infrastructure error (database down) dead-letters the
   event.

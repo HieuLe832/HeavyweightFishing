@@ -140,7 +140,9 @@ public class RabbitMqConsumer(RabbitMqSettings settings, IEnumerable<IBusHandler
                 await handler.HandleAsync(delivery.Body, ct);
                 await channel.BasicAckAsync(delivery.DeliveryTag, false, ct);
             }
-            catch (Exception e) when (e is not OperationCanceledException)
+            // Only shutdown leaves the message unacknowledged (it is redelivered). Anything else, a TaskCanceledException from an
+            // HttpClient timeout included, is a failure: unacknowledged, it would hold a prefetch slot until the consumer stalls.
+            catch (Exception e) when (!ct.IsCancellationRequested)
             {
                 log.LogError(e, "Handler {Handler} failed; dead-lettering the message", handler.Name);
                 await channel.BasicNackAsync(delivery.DeliveryTag, false, requeue: false, ct);

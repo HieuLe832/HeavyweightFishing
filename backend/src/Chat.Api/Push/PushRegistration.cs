@@ -5,6 +5,12 @@ namespace Chat.Api.Push;
 public static class PushRegistration
 {
     /// <summary>
+    /// How long one provider call may take. Push is best effort and sends to devices one after another, so a provider that hangs
+    /// must not hold the queue for HttpClient's default 100 seconds.
+    /// </summary>
+    public static readonly TimeSpan SendTimeout = TimeSpan.FromSeconds(10);
+
+    /// <summary>
     /// Registers one <see cref="IPushSender"/> per platform: the real one when its <c>Push</c> section is complete, the logging
     /// one when it is empty. A half-filled section throws, so a typo in a key name cannot silently turn pushes off.
     /// </summary>
@@ -39,7 +45,7 @@ public static class PushRegistration
             return;
         }
         var account = ServiceAccount.Load(options.ServiceAccountJsonPath!);
-        services.AddHttpClient("fcm");
+        services.AddHttpClient("fcm", c => c.Timeout = SendTimeout);
         services.AddSingleton<IPushSender>(sp =>
         {
             var http = sp.GetRequiredService<IHttpClientFactory>().CreateClient("fcm");
@@ -58,7 +64,7 @@ public static class PushRegistration
         }
         if (!File.Exists(options.KeyPath))
             throw new InvalidOperationException($"Push:Apns:KeyPath points at a file that does not exist: {options.KeyPath}");
-        services.AddHttpClient("apns");
+        services.AddHttpClient("apns", c => c.Timeout = SendTimeout);
         services.AddSingleton<IPushSender>(sp => new ApnsPushSender(
             sp.GetRequiredService<IHttpClientFactory>().CreateClient("apns"), options, sp.GetRequiredService<TimeProvider>()));
     }
@@ -83,7 +89,7 @@ public static class PushRegistration
         {
             throw new InvalidOperationException($"Push:Web:PublicKey or Push:Web:PrivateKey is not a valid VAPID key: {e.Message}", e);
         }
-        services.AddHttpClient("webpush");
+        services.AddHttpClient("webpush", c => c.Timeout = SendTimeout);
         services.AddSingleton<IPushSender>(sp => new WebPushSender(new Lib.Net.Http.WebPush.PushServiceClient(sp.GetRequiredService<IHttpClientFactory>().CreateClient("webpush")), options));
     }
 
