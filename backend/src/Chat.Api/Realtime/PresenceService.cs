@@ -32,7 +32,7 @@ public class PresenceService(IPresenceStore store, ConnectionRegistry registry, 
     public async Task RenewAsync(CancellationToken ct)
     {
         var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        Interlocked.Exchange(ref _renewal, done.Task); // published before the list is taken, so a later disconnect sees it
+        _ = Interlocked.Exchange(ref _renewal, done.Task); // published before the list is taken, so a later disconnect sees it
         try
         {
             await Safe(async () => { await store.RenewAsync(registry.Snapshot(), ct); return true; }, false);
