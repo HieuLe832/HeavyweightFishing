@@ -89,6 +89,22 @@ public class SchemaBehaviourTests(PostgresFixture pg) : IClassFixture<PostgresFi
     }
 
     [Fact]
+    public async Task A_user_cannot_have_an_uploaded_and_a_preset_avatar_at_once()
+    {
+        var user = await pg.InsertUserAsync();
+        var media = Guid.NewGuid();
+        await pg.ExecAsync("""
+            INSERT INTO media (id, uploader_id, storage_key, mime_type, size_bytes, sha256, status)
+            VALUES (@m, @u, 'k', 'image/png', 1, decode(md5('x'), 'hex'), 'ready')
+            """, ("m", media), ("u", user));
+        await pg.ExecAsync("UPDATE users SET avatar_preset_key = 'cap' WHERE id = @u", ("u", user));
+
+        var ex = await Rejected(pg.ExecAsync("UPDATE users SET avatar_media_id = @m WHERE id = @u", ("m", media), ("u", user)));
+        Assert.Equal(PostgresErrorCodes.CheckViolation, ex.SqlState);
+        Assert.Equal("ck_users_one_avatar", ex.ConstraintName);
+    }
+
+    [Fact]
     public async Task Deleting_a_session_cascades_to_its_refresh_tokens_but_a_user_with_sessions_cannot_be_deleted()
     {
         var user = await pg.InsertUserAsync();

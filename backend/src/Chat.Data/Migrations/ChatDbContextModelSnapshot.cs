@@ -676,6 +676,11 @@ namespace Chat.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("avatar_media_id");
 
+                    b.Property<string>("AvatarPresetKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("avatar_preset_key");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
@@ -743,7 +748,10 @@ namespace Chat.Data.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_users_username");
 
-                    b.ToTable("users", (string)null);
+                    b.ToTable("users", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_users_one_avatar", "avatar_media_id IS NULL OR avatar_preset_key IS NULL");
+                        });
                 });
 
             modelBuilder.Entity("Chat.Data.Entities.VerificationCode", b =>

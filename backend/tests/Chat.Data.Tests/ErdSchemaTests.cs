@@ -11,7 +11,7 @@ public class ErdSchemaTests(PostgresFixture pg) : IClassFixture<PostgresFixture>
     private static readonly Dictionary<string, string[]> Tables = new()
     {
         ["users"] = ["id uuid", "username citext", "email citext", "email_verified_at timestamptz?",
-            "password_hash text?", "display_name text", "avatar_media_id uuid?", "role user_role",
+            "password_hash text?", "display_name text", "avatar_media_id uuid?", "avatar_preset_key varchar?", "role user_role",
             "status user_status", "failed_login_count int2", "locked_until timestamptz?",
             "created_at timestamptz", "updated_at timestamptz"],
         ["oauth_identities"] = ["id uuid", "user_id uuid", "provider text", "provider_subject text",

@@ -11,6 +11,8 @@ public class User
     public string? PasswordHash { get; set; }
     public required string DisplayName { get; set; }
     public Guid? AvatarMediaId { get; set; }
+    /// <summary>A character from the Avatar Provider's pack. Never set together with <see cref="AvatarMediaId"/>.</summary>
+    public string? AvatarPresetKey { get; set; }
     public UserRole Role { get; set; }
     public UserStatus Status { get; set; }
     public short FailedLoginCount { get; set; }

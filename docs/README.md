@@ -62,7 +62,7 @@ The ERD uses **crow's-foot** notation. Each table's header colour matches the DF
 
 | Store | Holds | Tables (see ERD) |
 |-------|-------|------------------|
-| D1 Users | Accounts, credentials, linked Google identities | `users`, `oauth_identities` |
+| D1 Users | Accounts, credentials, linked Google identities, the avatar choice (an upload or a preset key) | `users`, `oauth_identities` |
 | D2 Sessions & Devices | One row per signed-in device, refresh tokens, push tokens | `sessions`, `refresh_tokens` |
 | D3 Verification Codes | Email-verification and password-reset codes (hashed) | `verification_codes` |
 | D4 Contacts & Blocks | Who a user saved and who they blocked | `contacts`, `blocks` |
@@ -142,6 +142,9 @@ Design decisions worth knowing:
 - **Report evidence** is a JSON snapshot of the reported message, so deleting the message does not
   destroy the evidence.
 - **Admins** are users with `role = admin`. There is no separate admin table.
+- **One avatar per user.** `users.avatar_media_id` (an upload, D7) and `users.avatar_preset_key` (a character from the
+  Avatar Provider's pack) exclude each other (`ck_users_one_avatar`). The pack's catalog belongs to the provider, so there is
+  no table for it: the database keeps only the key, which survives the provider being down.
 
 ## API: auth
 

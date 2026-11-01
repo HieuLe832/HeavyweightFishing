@@ -10,10 +10,12 @@ internal class UserConfiguration : IEntityTypeConfiguration<User>
 {
     public void Configure(EntityTypeBuilder<User> b)
     {
-        b.ToTable("users");
+        // One avatar at a time: an upload or a preset key from the Avatar Provider.
+        b.ToTable("users", t => t.HasCheckConstraint("ck_users_one_avatar", "avatar_media_id IS NULL OR avatar_preset_key IS NULL"));
         b.HasKey(x => x.Id);
         b.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
         b.Property(x => x.Username).HasColumnType("citext");
+        b.Property(x => x.AvatarPresetKey).HasMaxLength(64);
         b.Property(x => x.Email).HasColumnType("citext");
         b.HasIndex(x => x.Username).IsUnique();
         b.HasIndex(x => x.Email).IsUnique();
