@@ -1,5 +1,4 @@
 using MailKit.Net.Smtp;
-using MailKit.Security;
 using Microsoft.Extensions.Options;
 using MimeKit;
 using Chat.Api.Auth;
@@ -18,7 +17,8 @@ public class SmtpEmailSender(IOptions<SmtpOptions> options) : IEmailSender
         message.Body = new TextPart("plain") { Text = body };
 
         using var client = new SmtpClient();
-        await client.ConnectAsync(smtp.Host, smtp.Port, SecureSocketOptions.None, ct);
+        await client.ConnectAsync(smtp.Host, smtp.Port, smtp.Security, ct);
+        if (!string.IsNullOrEmpty(smtp.Username)) await client.AuthenticateAsync(smtp.Username, smtp.Password ?? "", ct);
         await client.SendAsync(message, ct);
         await client.DisconnectAsync(true, ct);
     }

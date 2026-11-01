@@ -12,9 +12,8 @@ public class AccountService(
     ChatDbContext db,
     CodeService codes,
     IPasswordHasher<User> hasher,
-    IEmailSender email,
-    TimeProvider time,
-    ILogger<AccountService> log)
+    IEmailQueue emails,
+    TimeProvider time)
 {
     public async Task<Result<Guid>> RegisterAsync(RegisterRequest request, CancellationToken ct)
     {
@@ -49,7 +48,7 @@ public class AccountService(
             return pg.ConstraintName?.Contains("username") == true ? AuthError.UsernameTaken : AuthError.EmailTaken;
         }
 
-        await SendAsync(address, EmailTemplates.VerifyEmail(code), ct);
+        emails.Enqueue(address, EmailTemplates.VerifyEmail(code));
         return user.Id;
     }
 
@@ -77,7 +76,7 @@ public class AccountService(
 
         var code = await codes.IssueAsync(user.Id, VerificationPurpose.VerifyEmail, ct);
         await db.SaveChangesAsync(ct);
-        await SendAsync(user.Email, EmailTemplates.VerifyEmail(code), ct);
+        emails.Enqueue(user.Email, EmailTemplates.VerifyEmail(code));
     }
 
     /// <summary>Sends a reset code to an active account. Silent for unknown, inactive or throttled requests.</summary>
@@ -89,7 +88,7 @@ public class AccountService(
 
         var code = await codes.IssueAsync(user.Id, VerificationPurpose.ResetPassword, ct);
         await db.SaveChangesAsync(ct);
-        await SendAsync(user.Email, EmailTemplates.ResetPassword(code), ct);
+        emails.Enqueue(user.Email, EmailTemplates.ResetPassword(code));
     }
 
     public async Task<Result<bool>> ConfirmPasswordResetAsync(PasswordResetConfirmRequest request, CancellationToken ct)
@@ -113,18 +112,5 @@ public class AccountService(
             .SetProperty(x => x.RevokeReason, RevokeReasons.PasswordReset), ct);
         await tx.CommitAsync(ct);
         return true;
-    }
-
-    // A failed send must not fail the request: the user can ask for a new code.
-    private async Task SendAsync(string to, (string Subject, string Body) mail, CancellationToken ct)
-    {
-        try
-        {
-            await email.SendAsync(to, mail.Subject, mail.Body, ct);
-        }
-        catch (Exception e)
-        {
-            log.LogError(e, "Could not send email to {Address}", to);
-        }
     }
 }

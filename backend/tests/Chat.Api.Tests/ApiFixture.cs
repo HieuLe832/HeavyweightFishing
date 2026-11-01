@@ -153,6 +153,8 @@ public class ApiFixture : IAsyncLifetime
                 }
                 services.RemoveAll<IEmailSender>();
                 services.AddSingleton<IEmailSender>(owner.Email);
+                services.RemoveAll<IEmailQueue>();
+                services.AddSingleton<IEmailQueue>(owner.Email);
             });
         }
     }

@@ -162,6 +162,11 @@ Tokens: the access token is a 15-minute JWT (`sub`, `role`, `sid`). The refresh 
 `code` field. Settings live under `Auth` and `Smtp` in `appsettings.json`; `Auth:JwtKey` and
 `Auth:CodeKey` have no default outside Development.
 
+Emails are queued in memory and sent in the background, so a request never waits on the mail server, and the silent
+endpoints (resend, reset request) do not answer slower for an address that exists. A restart drops unsent emails; the user
+asks for a new code. For a real mail server set `Smtp:Security` (`StartTls` or `SslOnConnect`; the default `Auto` falls back
+to plain text when the server offers no TLS, as Mailpit does) and `Smtp:Username` / `Smtp:Password`.
+
 ## API: profile, contacts and blocking
 
 Implements process 2.0. Every endpoint needs a bearer token.

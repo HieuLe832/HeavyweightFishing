@@ -6,7 +6,8 @@ namespace Chat.Api.Tests;
 
 public record SentEmail(string To, string Subject, string Body);
 
-public sealed partial class CapturingEmailSender : IEmailSender
+/// <summary>Stands in for the mail server and the queue: tests read a code right after the request, so emails are captured at once.</summary>
+public sealed partial class CapturingEmailSender : IEmailSender, IEmailQueue
 {
     private readonly ConcurrentQueue<SentEmail> _sent = new();
 
@@ -17,6 +18,8 @@ public sealed partial class CapturingEmailSender : IEmailSender
         _sent.Enqueue(new SentEmail(to, subject, body));
         return Task.CompletedTask;
     }
+
+    public void Enqueue(string to, (string Subject, string Body) mail) => _sent.Enqueue(new SentEmail(to, mail.Subject, mail.Body));
 
     public IReadOnlyList<SentEmail> To(string email) =>
         Sent.Where(m => string.Equals(m.To, email, StringComparison.OrdinalIgnoreCase)).ToList();

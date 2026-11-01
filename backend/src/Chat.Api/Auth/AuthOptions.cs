@@ -27,4 +27,15 @@ public class SmtpOptions
     public string Host { get; set; } = "localhost";
     public int Port { get; set; } = 1025;
     public string From { get; set; } = "no-reply@chat.local";
+
+    /// <summary>
+    /// <c>Auto</c> uses TLS when the server offers it (Mailpit in development does not). Set <c>StartTls</c> or <c>SslOnConnect</c> for a
+    /// real mail server, so a connection without TLS fails instead of sending in the clear.
+    /// </summary>
+    public MailKit.Security.SecureSocketOptions Security { get; set; } = MailKit.Security.SecureSocketOptions.Auto;
+
+    /// <summary>Signs in to the mail server when set.</summary>
+    public string? Username { get; set; }
+
+    public string? Password { get; set; }
 }
