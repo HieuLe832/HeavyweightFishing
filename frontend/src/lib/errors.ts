@@ -14,6 +14,11 @@ const copy: Record<string, string> = {
   session_ended: "Your session has ended. Sign in again.",
   conversation_not_found: "That conversation is no longer available.",
   connection_lost: "The connection was lost. Check your network and try again.",
+  file_too_large: "That picture is too large. Use one under 10 MB.",
+  unsupported_media_type: "Use a PNG, JPEG, GIF or WebP picture.",
+  avatar_provider_unavailable: "Character avatars are offline right now.",
+  avatar_not_found: "That character is no longer available.",
+  avatar_provider_invalid: "That character could not be loaded.",
   unknown: "Something went wrong. Please try again.",
 };
 
