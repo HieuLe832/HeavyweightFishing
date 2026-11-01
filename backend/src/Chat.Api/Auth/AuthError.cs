@@ -29,6 +29,9 @@ public record AuthError(int Status, string Code, string Title)
     public static readonly AuthError FileTooLarge = new(413, "file_too_large", "That file is too large.");
     public static readonly AuthError UnsupportedMediaType = new(415, "unsupported_media_type", "That kind of file is not allowed.");
     public static readonly AuthError MediaNotFound = new(404, "media_not_found", "No such file.");
+    public static readonly AuthError AvatarProviderUnavailable = new(503, "avatar_provider_unavailable", "Character avatars are unavailable right now.");
+    public static readonly AuthError AvatarNotFound = new(404, "avatar_not_found", "No such avatar.");
+    public static readonly AuthError AvatarProviderInvalid = new(502, "avatar_provider_invalid", "The avatar provider sent something that is not an image.");
     public static readonly AuthError InvalidAttachment = new(400, "invalid_attachment", "One of the attachments cannot be used.");
     public static readonly AuthError ReportNotFound = new(404, "report_not_found", "No such report.");
     public static readonly AuthError ReportResolved = new(409, "report_resolved", "That report has already been decided.");

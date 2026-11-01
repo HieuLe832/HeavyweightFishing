@@ -70,11 +70,11 @@ public static class MediaEndpoints
     }
 
     /// <summary>A file's bytes with the locked-down headers every download gets (see docs/pitfalls.md, "Media").</summary>
-    public static IResult Serve(HttpContext http, MediaDownload file)
+    public static IResult Serve(HttpContext http, MediaDownload file, string cacheControl = "private, max-age=3600")
     {
         var headers = http.Response.Headers;
         headers.ETag = file.ETag;
-        headers.CacheControl = "private, max-age=3600";
+        headers.CacheControl = cacheControl;
         headers["X-Content-Type-Options"] = "nosniff";
         headers["Content-Security-Policy"] = "default-src 'none'; sandbox";
         headers.ContentDisposition = file.Inline ? "inline" : "attachment";

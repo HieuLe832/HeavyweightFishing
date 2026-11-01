@@ -1,3 +1,4 @@
+using Chat.Api.Avatars;
 using Chat.Api.Email;
 using Chat.Api.Push;
 using Chat.Api.Realtime;
@@ -40,6 +41,9 @@ public class ApiFixture : IAsyncLifetime
     /// <summary>What went onto the event bus (RabbitMQ is not configured in tests).</summary>
     /// <summary>Every notification the (fake) push providers were asked to send.</summary>
     public RecordingPushSender Push { get; } = new();
+
+    /// <summary>The Avatar Provider the API talks to (at http://avatars.test).</summary>
+    public FakeAvatarProvider Avatars { get; } = new();
 
     public InMemoryEventBus Bus => _factory.Services.GetRequiredService<InMemoryEventBus>();
 
@@ -135,6 +139,7 @@ public class ApiFixture : IAsyncLifetime
             builder.UseSetting("Auth:JwtKey", "test-jwt-key-test-jwt-key-test-jwt-key-0123456789");
             builder.UseSetting("Auth:CodeKey", "test-code-key-0123456789");
             builder.UseSetting("Media:Cleanup:Enabled", "false"); // tests run the cleanup themselves, on their clock
+            builder.UseSetting("AvatarProvider:BaseUrl", "http://avatars.test");
             // Every test request comes from the same address, and the limiter keeps real time: AuthRateLimitTests lowers it.
             builder.UseSetting("Auth:IpLimitCount", "1000000");
             foreach (var (key, value) in owner._settings) builder.UseSetting(key, value);
@@ -153,6 +158,7 @@ public class ApiFixture : IAsyncLifetime
                     services.AddSingleton<IPresenceStore>(sp =>
                         owner.Presence = new FaultablePresenceStore(ActivatorUtilities.CreateInstance<InMemoryPresenceStore>(sp)));
                 }
+                services.AddHttpClient(AvatarCatalog.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => owner.Avatars);
                 services.RemoveAll<IEmailSender>();
                 services.AddSingleton<IEmailSender>(owner.Email);
                 services.RemoveAll<IEmailQueue>();

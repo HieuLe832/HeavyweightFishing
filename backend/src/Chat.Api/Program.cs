@@ -1,5 +1,6 @@
 using Chat.Api;
 using Chat.Api.Auth;
+using Chat.Api.Avatars;
 using Chat.Api.Conversations;
 using Chat.Api.Email;
 using Chat.Api.Files;
@@ -15,6 +16,7 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -82,6 +84,10 @@ else
     builder.Services.AddSingleton<InMemoryObjectStore>();
     builder.Services.AddSingleton<IObjectStore>(sp => sp.GetRequiredService<InMemoryObjectStore>());
 }
+builder.Services.AddOptions<AvatarProviderOptions>().BindConfiguration(AvatarProviderOptions.Section);
+builder.Services.AddHttpClient(AvatarCatalog.HttpClientName, (sp, c) =>
+    c.Timeout = TimeSpan.FromSeconds(sp.GetRequiredService<IOptions<AvatarProviderOptions>>().Value.TimeoutSeconds));
+builder.Services.AddSingleton<AvatarCatalog>();
 builder.Services.AddOptions<MediaCleanupOptions>().BindConfiguration(MediaCleanupOptions.Section);
 builder.Services.AddHostedService<MediaCleanupService>();
 builder.Services.AddSingleton<UploadRateLimiter>();
@@ -134,6 +140,8 @@ PushRegistration.LogActiveSenders(app.Services.GetServices<IPushSender>(), app.L
 
 if (string.IsNullOrWhiteSpace(objectStore))
     app.Logger.LogWarning("ObjectStore:Endpoint is not configured: uploaded files are kept in memory and lost on restart.");
+if (!app.Services.GetRequiredService<AvatarCatalog>().Enabled)
+    app.Logger.LogInformation("AvatarProvider:BaseUrl is not configured: character avatars are off.");
 if (string.IsNullOrWhiteSpace(redis) || string.IsNullOrWhiteSpace(rabbitMq))
     app.Logger.LogWarning("Redis or RabbitMQ is not configured: running as a single node with in-memory presence and events.");
 
@@ -160,6 +168,7 @@ app.MapHistory();
 app.MapPresence();
 app.MapPush();
 app.MapMedia();
+app.MapAvatars();
 app.MapModeration();
 app.MapHub<ChatHub>("/hubs/chat");
 
