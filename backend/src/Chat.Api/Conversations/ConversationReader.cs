@@ -43,13 +43,17 @@ public class ConversationReader(ChatDbContext db)
         return new ConversationDetail(Summarize(membership, peer), members);
     }
 
-    /// <summary>The user's conversations, most recently active first. Pass the last <c>UpdatedAt</c> as <c>before</c> for the next page.</summary>
-    public async Task<List<ConversationSummary>> ListAsync(Guid userId, int limit, DateTimeOffset? before, CancellationToken ct)
+    /// <summary>
+    /// The user's conversations, most recently active first. For the next page pass the last <c>UpdatedAt</c> as <c>before</c> and its
+    /// <c>Id</c> as <c>beforeId</c>: several conversations can share a time, and <c>before</c> alone skips those at the page boundary.
+    /// </summary>
+    public async Task<List<ConversationSummary>> ListAsync(Guid userId, int limit, DateTimeOffset? before, Guid? beforeId, CancellationToken ct)
     {
         var rows = await (
             from m in db.ConversationMembers
             join c in db.Conversations on m.ConversationId equals c.Id
-            where m.UserId == userId && m.LeftAt == null && (before == null || c.UpdatedAt < before)
+            where m.UserId == userId && m.LeftAt == null
+                && (before == null || c.UpdatedAt < before || (beforeId != null && c.UpdatedAt == before && c.Id.CompareTo(beforeId.Value) > 0))
             orderby c.UpdatedAt descending, c.Id
             select new { c, m }).Take(limit).ToListAsync(ct);
 

@@ -206,7 +206,7 @@ Implements process 3.0. Every endpoint needs a bearer token. A conversation you 
 
 | Endpoint | Notes |
 |----------|-------|
-| `GET /conversations?limit=&before=` | Your conversations, newest activity first. `limit` 1-100 (default 50); pass the last `updatedAt` as `before` for the next page |
+| `GET /conversations?limit=&before=&beforeId=` | Your conversations, newest activity first. `limit` 1-100 (default 50); for the next page pass the last one's `updatedAt` as `before` and its `id` as `beforeId` (several can share a time) |
 | `GET /conversations/{id}` | The conversation plus its active members |
 | `POST /conversations/direct` | `{ userId }`. `201` for a new chat, `200` for the one that already exists |
 | `POST /conversations/group` | `{ title, memberIds }`. The creator becomes owner. Title 1-100 characters, at least one other member |

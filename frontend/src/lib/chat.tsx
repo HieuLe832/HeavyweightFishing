@@ -51,12 +51,15 @@ export function ChatProvider({ children, createConnection = createChatConnection
   const connectionRef = useRef<ChatConnection | null>(null);
   const membersLoaded = useRef(new Set<string>());
   const lastMarked = useRef<Record<string, number>>({});
+  /** The last conversation of the last page fetched: the cursor for the next page, in the server's own order. */
+  const listCursor = useRef<ConversationSummary | undefined>(undefined);
   useEffect(() => {
     stateRef.current = state;
   });
 
   const loadConversations = useCallback(async () => {
     const list = await api.request<ConversationSummary[]>("GET", `/conversations?limit=${PAGE}`);
+    listCursor.current = list.at(-1);
     dispatch({ type: "conversationsLoaded", conversations: list });
     setHasMoreConversations(list.length === PAGE);
   }, [api]);
@@ -191,10 +194,11 @@ export function ChatProvider({ children, createConnection = createChatConnection
   }, [api]);
 
   const loadMoreConversations = useCallback(async () => {
-    const { order, conversations } = stateRef.current;
-    const oldest = order.length ? conversations[order[order.length - 1]] : undefined;
-    if (!oldest) return;
-    const list = await api.request<ConversationSummary[]>("GET", `/conversations?limit=${PAGE}&before=${encodeURIComponent(oldest.updatedAt)}`);
+    const last = listCursor.current;
+    if (!last) return;
+    // Conversations can share a time, so the cursor is the time and the id; the time alone would skip some at the boundary.
+    const list = await api.request<ConversationSummary[]>("GET", `/conversations?limit=${PAGE}&before=${encodeURIComponent(last.updatedAt)}&beforeId=${last.id}`);
+    listCursor.current = list.at(-1) ?? last;
     dispatch({ type: "conversationsAppended", conversations: list });
     setHasMoreConversations(list.length === PAGE);
   }, [api]);

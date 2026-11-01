@@ -243,6 +243,25 @@ public class ConversationTests(ApiFixture api) : IClassFixture<ApiFixture>
     }
 
     [Fact]
+    public async Task Paging_with_before_and_before_id_misses_nothing_when_conversations_share_a_time()
+    {
+        var me = await api.CreatePersonAsync();
+        var a = await api.CreatePersonAsync();
+        var ids = new List<Guid>();
+        for (var i = 0; i < 3; i++) ids.Add(await CreateGroupAsync(me, $"same{i}", a)); // the clock does not move: one updatedAt
+
+        var seen = new List<Guid>();
+        var page = await (await C.GetAsync(me, "/conversations?limit=2")).JsonAsync();
+        seen.AddRange(Ids(page));
+        var last = page.EnumerateArray().Last();
+        var next = $"/conversations?limit=2&before={Uri.EscapeDataString(last.GetProperty("updatedAt").GetString()!)}&beforeId={last.GetProperty("id").GetGuid()}";
+        seen.AddRange(Ids(await (await C.GetAsync(me, next)).JsonAsync()));
+
+        Assert.Equal(ids.Order(), seen.Order());
+        Assert.Equal(3, seen.Distinct().Count());
+    }
+
+    [Fact]
     public async Task Mute_sets_and_clears_the_time_for_this_member_only()
     {
         var me = await api.CreatePersonAsync();

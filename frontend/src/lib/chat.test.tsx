@@ -260,6 +260,16 @@ describe("ChatProvider", () => {
     expect(connection.start).toHaveBeenCalledTimes(before);
   });
 
+  it("loads more conversations after the last one of the previous page, by time and id", async () => {
+    const page = [conv("b", { updatedAt: "2026-01-02T00:00:00Z" }), conv("a", { updatedAt: "2026-01-01T00:00:00Z" })];
+    const { latest, request } = setup((method, path) => (path.startsWith("/conversations?") ? page : standardRoute()(method, path)));
+    await flush();
+
+    await act(async () => { await latest.chat.loadMoreConversations(); });
+
+    expect(paths(request)).toContain(`/conversations?limit=50&before=${encodeURIComponent("2026-01-01T00:00:00Z")}&beforeId=a`);
+  });
+
   it("stops asking for newer messages when the server claims more but sends nothing newer", async () => {
     const { latest, request } = setup((method, path) => {
       if (path.includes("/messages?after=")) return { messages: [msg("a", 2)], hasMore: true };

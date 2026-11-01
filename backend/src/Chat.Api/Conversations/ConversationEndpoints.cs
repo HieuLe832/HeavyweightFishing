@@ -9,12 +9,13 @@ public static class ConversationEndpoints
     {
         var group = app.MapGroup("/conversations").RequireAuthorization();
 
-        group.MapGet("/", async (int? limit, DateTimeOffset? before, ClaimsPrincipal me, ConversationReader reader, CancellationToken ct) =>
+        group.MapGet("/", async (int? limit, DateTimeOffset? before, Guid? beforeId, ClaimsPrincipal me, ConversationReader reader, CancellationToken ct) =>
         {
             var errors = ConversationRules.ValidatePage(limit);
+            if (beforeId is not null && before is null) errors["beforeId"] = ["Send before with beforeId."];
             if (errors.Count > 0) return ProblemResults.Invalid(errors);
 
-            return Results.Ok(await reader.ListAsync(me.UserId(), limit ?? ConversationRules.DefaultLimit, before, ct));
+            return Results.Ok(await reader.ListAsync(me.UserId(), limit ?? ConversationRules.DefaultLimit, before, beforeId, ct));
         });
 
         group.MapGet("/{id:guid}", async (Guid id, ClaimsPrincipal me, ConversationReader reader, CancellationToken ct) =>
