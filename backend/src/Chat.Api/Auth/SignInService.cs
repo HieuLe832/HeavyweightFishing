@@ -172,7 +172,7 @@ public class SignInService(
         new(tokens.CreateAccessToken(user, sessionId), tokens.AccessTokenSeconds, refreshToken, Summary(user));
 
     public static UserSummary Summary(User u) =>
-        new(u.Id, u.Username, u.Email, u.DisplayName, TokenService.RoleName(u.Role));
+        new(u.Id, u.Username, u.Email, u.DisplayName, TokenService.RoleName(u.Role), u.AvatarMediaId, u.AvatarPresetKey);
 
     private static string Truncate(string s, int max) => s.Length <= max ? s : s[..max];
 }

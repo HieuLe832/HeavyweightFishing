@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using Chat.Api.Auth;
+using Chat.Api.Avatars;
 using Chat.Api.Messaging;
 using Chat.Api.Users;
 using Chat.Data;
@@ -21,7 +22,7 @@ public record MediaDownload(byte[] Content, string MimeType, string ETag, bool I
 /// <summary>Process 5.0: validates and stores uploads (D7), decides who may read a file, and sets avatars.</summary>
 public class MediaService(
     ChatDbContext db, IObjectStore store, UserAccess access, IOptions<MediaOptions> options, UploadRateLimiter limiter,
-    TimeProvider time, ILogger<MediaService> log)
+    AvatarCatalog avatars, TimeProvider time, ILogger<MediaService> log)
 {
     /// <summary>Takes one upload from the caller's allowance. The endpoint asks before it reads the request body.</summary>
     public bool TryStartUpload(Guid userId) => limiter.TryAcquire(userId);
@@ -131,12 +132,17 @@ public class MediaService(
         return media.MimeType.StartsWith("image/", StringComparison.Ordinal) ? null : AuthError.UnsupportedMediaType;
     }
 
-    public async Task<AuthError?> SetUserAvatarAsync(Guid userId, Guid? mediaId, CancellationToken ct)
+    /// <summary>
+    /// Sets the caller's avatar to an upload or to a preset key from the Avatar Provider (checked against its catalog), and
+    /// clears the other; both null clears it. The two columns exclude each other (<c>ck_users_one_avatar</c>).
+    /// </summary>
+    public async Task<AuthError?> SetUserAvatarAsync(Guid userId, Guid? mediaId, string? presetKey, CancellationToken ct)
     {
         if (mediaId is { } id && await CheckAvatarAsync(userId, id, ct) is { } error) return error;
+        if (presetKey is not null && await avatars.CheckKeyAsync(presetKey, ct) is { } presetError) return presetError;
         var now = time.GetUtcNow();
-        await db.Users.Where(u => u.Id == userId)
-            .ExecuteUpdateAsync(u => u.SetProperty(x => x.AvatarMediaId, mediaId).SetProperty(x => x.UpdatedAt, now), ct);
+        await db.Users.Where(u => u.Id == userId).ExecuteUpdateAsync(u => u
+            .SetProperty(x => x.AvatarMediaId, mediaId).SetProperty(x => x.AvatarPresetKey, presetKey).SetProperty(x => x.UpdatedAt, now), ct);
         return null;
     }
 }

@@ -31,14 +31,14 @@ public class ConversationReader(ChatDbContext db)
             join u in db.Users on m.UserId equals u.Id
             where m.ConversationId == conversationId && m.LeftAt == null
             orderby m.JoinedAt, u.Username
-            select new MemberSummary(u.Id, u.Username, u.DisplayName, ConversationRules.Name(m.Role), m.JoinedAt, m.LastDeliveredSeq, m.LastReadSeq, u.AvatarMediaId)
+            select new MemberSummary(u.Id, u.Username, u.DisplayName, ConversationRules.Name(m.Role), m.JoinedAt, m.LastDeliveredSeq, m.LastReadSeq, u.AvatarMediaId, u.AvatarPresetKey)
         ).ToListAsync(ct);
 
         PersonBrief? peer = null;
         if (membership.Conversation.Type == ConversationType.Direct)
         {
             var other = members.FirstOrDefault(m => m.UserId != userId);
-            if (other is not null) peer = new PersonBrief(other.UserId, other.Username, other.DisplayName, other.AvatarMediaId);
+            if (other is not null) peer = new PersonBrief(other.UserId, other.Username, other.DisplayName, other.AvatarMediaId, other.AvatarPresetKey);
         }
         return new ConversationDetail(Summarize(membership, peer), members);
     }
@@ -62,7 +62,7 @@ public class ConversationReader(ChatDbContext db)
             from m in db.ConversationMembers
             join u in db.Users on m.UserId equals u.Id
             where directIds.Contains(m.ConversationId) && m.UserId != userId
-            select new { m.ConversationId, Peer = new PersonBrief(u.Id, u.Username, u.DisplayName, u.AvatarMediaId) }
+            select new { m.ConversationId, Peer = new PersonBrief(u.Id, u.Username, u.DisplayName, u.AvatarMediaId, u.AvatarPresetKey) }
         ).ToDictionaryAsync(x => x.ConversationId, x => x.Peer, ct);
 
         return rows.Select(r => Summarize(new Membership(r.c, r.m), peers.GetValueOrDefault(r.c.Id))).ToList();

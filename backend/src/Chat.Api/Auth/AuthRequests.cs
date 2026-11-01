@@ -18,7 +18,7 @@ public record SessionSummary(
     Guid Id, string DeviceName, string UserAgent, string IpAddress,
     DateTimeOffset CreatedAt, DateTimeOffset LastSeenAt, bool Current);
 
-public record UserSummary(Guid Id, string Username, string Email, string DisplayName, string Role);
+public record UserSummary(Guid Id, string Username, string Email, string DisplayName, string Role, Guid? AvatarMediaId, string? AvatarPresetKey);
 
 public record AuthResponse(string AccessToken, int ExpiresIn, string RefreshToken, UserSummary User);
 

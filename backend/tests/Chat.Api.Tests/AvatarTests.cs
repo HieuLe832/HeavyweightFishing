@@ -146,4 +146,93 @@ public class AvatarTests(ApiFixture api) : IClassFixture<ApiFixture>
         Assert.Empty((await catalog.KeysAsync(CancellationToken.None)).Value!);
         Assert.Equal(AuthError.AvatarProviderUnavailable, await catalog.CheckKeyAsync("01-a", CancellationToken.None));
     }
+
+    // --- picking ---
+
+    private static string? Preset(System.Text.Json.JsonElement e) => e.GetProperty("avatarPresetKey").GetString();
+
+    private async Task<System.Text.Json.JsonElement> MeAsync(Person who) => await (await api.Client.GetAsync(who, "/auth/me")).JsonAsync();
+
+    [Fact]
+    public async Task Picking_a_preset_shows_in_every_profile_shape()
+    {
+        var alice = await FreshAsync();
+        var bob = await api.CreatePersonAsync();
+        api.Avatars.Set("01-a", TestFiles.Png());
+        var opened = await api.Client.PostAsync(bob, "/conversations/direct", new { userId = alice.Id });
+        var conversation = (await opened.JsonAsync()).GetProperty("conversation").GetProperty("id").GetGuid();
+
+        Assert.Equal(HttpStatusCode.NoContent, (await api.Client.PutAsync(alice, "/users/me/avatar", new { presetKey = "01-a" })).StatusCode);
+
+        var me = await MeAsync(alice);
+        Assert.Equal("01-a", Preset(me));
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, me.GetProperty("avatarMediaId").ValueKind);
+        Assert.Equal("01-a", Preset(await (await api.Client.GetAsync(bob, $"/users/{alice.Id}")).JsonAsync()));
+        var list = await (await api.Client.GetAsync(bob, "/conversations")).JsonAsync();
+        Assert.Equal("01-a", Preset(list.EnumerateArray().Single(c => c.GetProperty("id").GetGuid() == conversation).GetProperty("peer")));
+        var detail = await (await api.Client.GetAsync(bob, $"/conversations/{conversation}")).JsonAsync();
+        Assert.Equal("01-a", Preset(detail.GetProperty("members").EnumerateArray().Single(m => m.GetProperty("userId").GetGuid() == alice.Id)));
+    }
+
+    [Fact]
+    public async Task A_preset_and_an_upload_replace_each_other()
+    {
+        var me = await FreshAsync();
+        api.Avatars.Set("01-a", TestFiles.Png());
+        var upload = await api.UploadedAsync(me);
+
+        (await api.Client.PutAsync(me, "/users/me/avatar", new { mediaId = upload })).EnsureSuccessStatusCode();
+        (await api.Client.PutAsync(me, "/users/me/avatar", new { presetKey = "01-a" })).EnsureSuccessStatusCode();
+        var profile = await MeAsync(me);
+        Assert.Equal("01-a", Preset(profile));
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, profile.GetProperty("avatarMediaId").ValueKind);
+
+        (await api.Client.PutAsync(me, "/users/me/avatar", new { mediaId = upload })).EnsureSuccessStatusCode();
+        profile = await MeAsync(me);
+        Assert.Equal(upload, profile.GetProperty("avatarMediaId").GetGuid());
+        Assert.Null(Preset(profile));
+
+        (await api.Client.DeleteAsync(me, "/users/me/avatar")).EnsureSuccessStatusCode();
+        profile = await MeAsync(me);
+        Assert.Null(Preset(profile));
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, profile.GetProperty("avatarMediaId").ValueKind);
+    }
+
+    [Fact]
+    public async Task Picking_needs_the_provider_and_a_known_key()
+    {
+        var me = await FreshAsync();
+        api.Avatars.Set("01-a", TestFiles.Png());
+        var upload = await api.UploadedAsync(me);
+
+        await (await api.Client.PutAsync(me, "/users/me/avatar", new { presetKey = "zz-none" })).AssertErrorAsync(HttpStatusCode.NotFound, "avatar_not_found");
+        await (await api.Client.PutAsync(me, "/users/me/avatar", new { })).AssertErrorAsync(HttpStatusCode.BadRequest, "validation_failed");
+        await (await api.Client.PutAsync(me, "/users/me/avatar", new { mediaId = upload, presetKey = "01-a" })).AssertErrorAsync(HttpStatusCode.BadRequest, "validation_failed");
+
+        api.Avatars.Down = true;
+        api.Time.Advance(TimeSpan.FromSeconds(61));
+        await (await api.Client.PutAsync(me, "/users/me/avatar", new { presetKey = "01-a" })).AssertErrorAsync(HttpStatusCode.ServiceUnavailable, "avatar_provider_unavailable");
+    }
+
+    [Fact]
+    public async Task A_stored_preset_survives_the_provider_going_away()
+    {
+        var me = await FreshAsync();
+        api.Avatars.Set("01-a", TestFiles.Png());
+        (await api.Client.PutAsync(me, "/users/me/avatar", new { presetKey = "01-a" })).EnsureSuccessStatusCode();
+
+        api.Avatars.Down = true;
+        api.Time.Advance(TimeSpan.FromSeconds(61));
+        Assert.Equal("01-a", Preset(await MeAsync(me)));
+        await (await api.Client.GetAsync(me, "/avatars/01-a")).AssertErrorAsync(HttpStatusCode.ServiceUnavailable, "avatar_provider_unavailable");
+
+        // Back, but the key left the pack: the choice stays, the image is gone, and another one can be picked.
+        api.Avatars.Clear();
+        api.Avatars.Set("02-b", TestFiles.Png());
+        api.Time.Advance(TimeSpan.FromSeconds(61));
+        Assert.Equal("01-a", Preset(await MeAsync(me)));
+        await (await api.Client.GetAsync(me, "/avatars/01-a")).AssertErrorAsync(HttpStatusCode.NotFound, "avatar_not_found");
+        (await api.Client.PutAsync(me, "/users/me/avatar", new { presetKey = "02-b" })).EnsureSuccessStatusCode();
+        Assert.Equal("02-b", Preset(await MeAsync(me)));
+    }
 }

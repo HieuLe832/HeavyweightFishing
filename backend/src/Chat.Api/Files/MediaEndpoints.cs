@@ -6,7 +6,8 @@ using Microsoft.Extensions.Options;
 
 namespace Chat.Api.Files;
 
-public record AvatarRequest(Guid? MediaId);
+/// <param name="PresetKey">A character from the Avatar Provider's pack (own avatar only).</param>
+public record AvatarRequest(Guid? MediaId, string? PresetKey = null);
 
 public static class MediaEndpoints
 {
@@ -49,12 +50,13 @@ public static class MediaEndpoints
 
         app.MapPut("/users/me/avatar", async (AvatarRequest request, ClaimsPrincipal me, MediaService svc, CancellationToken ct) =>
         {
-            if (request.MediaId is not { } mediaId) return ProblemResults.Invalid(new() { ["mediaId"] = ["Send the id of an uploaded image."] });
-            return NoContent(await svc.SetUserAvatarAsync(me.UserId(), mediaId, ct));
+            if ((request.MediaId is null) == (request.PresetKey is null))
+                return ProblemResults.Invalid(new() { ["mediaId"] = ["Send the id of an uploaded image, or a presetKey, not both."] });
+            return NoContent(await svc.SetUserAvatarAsync(me.UserId(), request.MediaId, request.PresetKey, ct));
         }).RequireAuthorization();
 
         app.MapDelete("/users/me/avatar", async (ClaimsPrincipal me, MediaService svc, CancellationToken ct) =>
-            NoContent(await svc.SetUserAvatarAsync(me.UserId(), null, ct))).RequireAuthorization();
+            NoContent(await svc.SetUserAvatarAsync(me.UserId(), null, null, ct))).RequireAuthorization();
 
         app.MapPut("/conversations/{id:guid}/avatar", async (
             Guid id, AvatarRequest request, ClaimsPrincipal me, MediaService media, GroupService groups, ConversationReader reader, CancellationToken ct) =>
