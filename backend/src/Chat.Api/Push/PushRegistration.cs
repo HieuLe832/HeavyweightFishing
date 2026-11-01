@@ -89,7 +89,8 @@ public static class PushRegistration
         {
             throw new InvalidOperationException($"Push:Web:PublicKey or Push:Web:PrivateKey is not a valid VAPID key: {e.Message}", e);
         }
-        services.AddHttpClient("webpush", c => c.Timeout = SendTimeout);
+        // The endpoint comes from a client, so the connection refuses private addresses, whatever the name resolves to.
+        services.AddHttpClient("webpush", c => c.Timeout = SendTimeout).ConfigurePrimaryHttpMessageHandler(WebPushSender.PublicOnlyHandler);
         services.AddSingleton<IPushSender>(sp => new WebPushSender(new Lib.Net.Http.WebPush.PushServiceClient(sp.GetRequiredService<IHttpClientFactory>().CreateClient("webpush")), options));
     }
 

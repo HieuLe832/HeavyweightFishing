@@ -79,6 +79,32 @@ public sealed class WebPushSender : IPushSender
         }
     }
 
+    /// <summary>
+    /// The handler for Web Push calls. <see cref="TryDecode"/> only sees the endpoint's text, and a public-looking name can resolve to a
+    /// private address, so the check is repeated where the socket connects: only a public address is ever dialled.
+    /// </summary>
+    public static SocketsHttpHandler PublicOnlyHandler() => new()
+    {
+        ConnectCallback = async (context, ct) =>
+        {
+            var host = context.DnsEndPoint.Host;
+            var addresses = IPAddress.TryParse(host.Trim('[', ']'), out var literal) ? [literal] : await Dns.GetHostAddressesAsync(host, ct);
+            var target = addresses.FirstOrDefault(IsPublic)
+                ?? throw new HttpRequestException($"The push endpoint host {host} does not resolve to a public address.");
+            var socket = new Socket(target.AddressFamily, SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+            try
+            {
+                await socket.ConnectAsync(new IPEndPoint(target, context.DnsEndPoint.Port), ct);
+                return new NetworkStream(socket, ownsSocket: true);
+            }
+            catch
+            {
+                socket.Dispose();
+                throw;
+            }
+        },
+    };
+
     private static string? Text(JsonElement element, string name) =>
         element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
 
@@ -97,8 +123,11 @@ public sealed class WebPushSender : IPushSender
         var bytes = ip.GetAddressBytes();
         return ip.AddressFamily switch
         {
-            AddressFamily.InterNetwork => !(bytes[0] == 10 || bytes[0] == 127 || (bytes[0] == 172 && bytes[1] is >= 16 and <= 31) || (bytes[0] == 192 && bytes[1] == 168) || (bytes[0] == 169 && bytes[1] == 254)),
-            AddressFamily.InterNetworkV6 => !(ip.IsIPv6LinkLocal || ip.IsIPv6SiteLocal || (bytes[0] & 0xFE) == 0xFC),
+            // 0/8 "this network", 10/8, 100.64/10 carrier-grade NAT, 127/8, 169.254/16 link-local (cloud metadata), 172.16/12,
+            // 192.168/16, and 224/3 multicast and reserved.
+            AddressFamily.InterNetwork => !(bytes[0] is 0 or 10 or 127 or >= 224 || (bytes[0] == 100 && bytes[1] is >= 64 and <= 127)
+                || (bytes[0] == 172 && bytes[1] is >= 16 and <= 31) || (bytes[0] == 192 && bytes[1] == 168) || (bytes[0] == 169 && bytes[1] == 254)),
+            AddressFamily.InterNetworkV6 => !(ip.IsIPv6LinkLocal || ip.IsIPv6SiteLocal || ip.IsIPv6Multicast || (bytes[0] & 0xFE) == 0xFC),
             _ => false,
         };
     }

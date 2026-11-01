@@ -339,7 +339,7 @@ above) and notifies each of their devices.
   |----------|----------|-------|
   | FCM | `Push:Fcm:ServiceAccountJsonPath` | HTTP v1 API. The service account file is turned into access tokens by the API itself (no Google package) |
   | APNs | `Push:Apns:KeyPath` (the `.p8`), `KeyId`, `TeamId`, `BundleId`, `Sandbox` | HTTP/2 with a provider token renewed every 50 minutes |
-  | Web Push | `Push:Web:PublicKey`, `PrivateKey` (VAPID, base64url), `Subject` (`mailto:` or `https://`) | RFC 8291 encryption via `Lib.Net.Http.WebPush`. The stored token is the base64url of the browser's subscription JSON `{"endpoint","keys":{"p256dh","auth"}}`; its endpoint must be `https` on a public address |
+  | Web Push | `Push:Web:PublicKey`, `PrivateKey` (VAPID, base64url), `Subject` (`mailto:` or `https://`) | RFC 8291 encryption via `Lib.Net.Http.WebPush`. The stored token is the base64url of the browser's subscription JSON `{"endpoint","keys":{"p256dh","auth"}}`; its endpoint must be `https` on a public address, checked again where the socket connects, so a name that resolves to a private address is refused too |
 
   Keep keys out of source control: set them with environment variables (`Push__Apns__KeyId`) or user secrets.
   **Delivery to real devices has not been tested**, because no credentials exist in the repo: the senders are tested against

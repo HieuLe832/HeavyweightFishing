@@ -105,6 +105,12 @@ public class WebPushSenderTests
     [InlineData("ftp://push.example.test/send/abc")]
     [InlineData("https://127.0.0.1/send/abc")]
     [InlineData("https://localhost/send/abc")]
+    [InlineData("https://169.254.169.254/latest/meta-data")] // cloud metadata
+    [InlineData("https://100.64.0.1/send/abc")]               // carrier-grade NAT
+    [InlineData("https://0.0.0.0/send/abc")]
+    [InlineData("https://224.0.0.1/send/abc")]                // multicast
+    [InlineData("https://[::1]/send/abc")]
+    [InlineData("https://[fd00::1]/send/abc")]
     public async Task An_endpoint_that_is_not_a_public_https_address_is_an_invalid_token_and_is_never_called(string endpoint)
     {
         Assert.Equal(PushResult.InvalidToken, await Sender().SendAsync(Message, Subscription(endpoint), CancellationToken.None));
@@ -144,5 +150,30 @@ public class WebPushSenderTests
         }));
 
         Assert.Contains("Push:Web:Subject", e.Message);
+    }
+
+    /// <summary>A name is not an address: one that resolves to a private address must be refused where the socket connects.</summary>
+    [Fact]
+    public async Task The_web_push_connection_refuses_a_host_name_that_resolves_to_a_private_address()
+    {
+        using var http = new HttpClient(WebPushSender.PublicOnlyHandler());
+
+        var e = await Assert.ThrowsAnyAsync<HttpRequestException>(() => http.GetAsync("https://localhost:9/send/abc"));
+
+        Assert.Contains("public address", e.ToString());
+    }
+
+    [Fact]
+    public void The_web_push_client_connects_through_the_public_only_handler()
+    {
+        var provider = PushRegistrationTests.Build(new()
+        {
+            ["Push:Web:PublicKey"] = _vapid.PublicKey, ["Push:Web:PrivateKey"] = _vapid.PrivateKey, ["Push:Web:Subject"] = "mailto:ops@example.test",
+        });
+
+        HttpMessageHandler handler = provider.GetRequiredService<IHttpMessageHandlerFactory>().CreateHandler("webpush");
+        while (handler is DelegatingHandler delegating) handler = delegating.InnerHandler!;
+
+        Assert.NotNull(Assert.IsType<SocketsHttpHandler>(handler).ConnectCallback);
     }
 }
