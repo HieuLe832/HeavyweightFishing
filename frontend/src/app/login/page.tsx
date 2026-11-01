@@ -43,7 +43,7 @@ export default function LoginPage() {
         <Field label="Password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
         {error ? <FormError>{messageForError(error)}</FormError> : null}
         {error instanceof ApiError && error.code === "email_not_verified" ? (
-          <Link href="/register" className="text-center font-semibold text-gold underline">
+          <Link href="/register" className="text-center font-bold text-ink underline decoration-float decoration-3 underline-offset-2">
             Verify your email
           </Link>
         ) : null}
@@ -53,7 +53,7 @@ export default function LoginPage() {
       </form>
       <p className="mt-4 text-center text-sm">
         New here?{" "}
-        <Link href="/register" className="font-semibold text-gold underline">
+        <Link href="/register" className="font-bold text-ink underline decoration-float decoration-3 underline-offset-2">
           Create an account
         </Link>
       </p>

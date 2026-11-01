@@ -6,9 +6,8 @@ type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 const styles = {
-  primary:
-    "bg-gold text-ink border-b-4 border-gold-dark hover:brightness-105 active:translate-y-[2px] active:border-b-2",
-  ghost: "bg-transparent text-cream border-2 border-water-light/60 hover:bg-water-light/15",
+  primary: "bg-float text-paper shadow-hard hover:brightness-105 active:translate-x-[2px] active:translate-y-[2px] active:shadow-none",
+  ghost: "bg-paper text-ink shadow-hard-sm hover:bg-butter-light active:translate-x-[1px] active:translate-y-[1px] active:shadow-none",
 };
 
 export function Button({ variant = "primary", busy = false, disabled, className = "", children, type = "button", ...rest }: Props) {
@@ -17,7 +16,7 @@ export function Button({ variant = "primary", busy = false, disabled, className 
       type={type}
       disabled={disabled || busy}
       aria-busy={busy || undefined}
-      className={`rounded-2xl px-5 py-2 font-display text-lg font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cream disabled:cursor-not-allowed disabled:opacity-60 ${styles[variant]} ${className}`}
+      className={`rounded-xl border-3 border-ink px-5 py-2 text-lg font-bold transition focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-lake disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none ${styles[variant]} ${className}`}
       {...rest}
     >
       {children}

@@ -13,18 +13,18 @@ interface Props {
 
 export function MessageBubble({ message, mine, senderName, nameOf, now, onRetry }: Props) {
   if (message.type === "system") {
-    return <p className="my-2 text-center text-sm text-water-light">{systemNoticeText(message.body, nameOf)}</p>;
+    return <p className="my-2 text-center text-sm font-semibold text-sky-ink">{systemNoticeText(message.body, nameOf)}</p>;
   }
 
   const deleted = message.deletedAt != null;
   const text = deleted ? null : message.body;
   return (
     <div data-mine={mine} className={`flex flex-col ${mine ? "items-end" : "items-start"}`}>
-      {senderName ? <span className="mx-2 mt-2 text-xs font-bold text-gold">{senderName}</span> : null}
+      {senderName ? <span className="mx-1 mt-2 mb-0.5 text-xs font-bold">{senderName}</span> : null}
       <div
-        className={`max-w-[85%] rounded-2xl border-2 px-3 py-2 shadow-sm md:max-w-[70%] ${
-          mine ? "border-gold-dark bg-gold text-ink" : "border-sand bg-cream text-ink"
-        } ${message.local === "failed" ? "border-coral" : ""}`}
+        className={`max-w-[85%] border-3 px-3 py-2 text-ink shadow-hard md:max-w-[70%] ${
+          mine ? "rounded-2xl rounded-br-sm bg-sun" : "rounded-2xl rounded-bl-sm bg-paper"
+        } ${message.local === "failed" ? "border-float" : "border-ink"}`}
       >
         {deleted ? <p className="italic opacity-70">Message deleted</p> : null}
         {!deleted && message.type === "media" ? <p className="font-semibold">Sent an attachment</p> : null}
@@ -33,7 +33,7 @@ export function MessageBubble({ message, mine, senderName, nameOf, now, onRetry 
           {message.local === "sending" ? <span>Sending…</span> : null}
           {message.local === "failed" ? (
             <>
-              <span className="font-bold text-coral">Not sent</span>
+              <span className="font-bold text-float">Not sent</span>
               <button type="button" onClick={() => onRetry(message.clientMsgId)} className="font-bold underline">
                 Retry
               </button>

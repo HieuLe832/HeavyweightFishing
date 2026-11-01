@@ -4,7 +4,7 @@ export function Bobber({ count }: { count: number }) {
   return (
     <span
       aria-label={`${count} unread`}
-      className="animate-bob inline-flex h-7 min-w-7 items-center justify-center rounded-full border-2 border-cream bg-coral px-1.5 text-sm font-bold text-cream shadow"
+      className="animate-bob inline-flex h-6 min-w-6 items-center justify-center rounded-full border-2 border-ink bg-float px-1.5 text-xs font-bold text-paper"
     >
       {count > 99 ? "99+" : count}
     </span>

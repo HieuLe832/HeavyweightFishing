@@ -20,11 +20,11 @@ export function ConversationView({ id }: { id: string }) {
   const conversation = state.conversations[id];
   if (!conversation) {
     return (
-      <div className="flex flex-1 items-center justify-center p-6 text-center text-sand">
+      <div className="flex flex-1 items-center justify-center p-6 text-center font-semibold">
         {state.listLoaded ? (
           <div>
             <p>That conversation is no longer available.</p>
-            <Link href="/" className="font-semibold text-gold underline">Back to your chats</Link>
+            <Link href="/" className="font-bold underline decoration-float decoration-3 underline-offset-2">Back to your chats</Link>
           </div>
         ) : (
           <p>Loading…</p>
@@ -35,11 +35,14 @@ export function ConversationView({ id }: { id: string }) {
 
   return (
     <section className="flex min-h-0 flex-1 flex-col" aria-label={conversationTitle(conversation)}>
-      <header className="flex items-center gap-3 border-b-4 border-sand bg-water-deep px-4 py-3">
-        <Link href="/" aria-label="Back to chats" className="rounded-full px-2 py-1 text-2xl text-gold md:hidden">
+      <header className="flex items-center gap-3 border-b-3 border-ink bg-paper px-4 py-3">
+        <Link href="/" aria-label="Back to chats" className="rounded-lg border-3 border-ink bg-sun px-2 text-xl font-bold shadow-hard-sm md:hidden">
           ←
         </Link>
-        <h2 className="truncate font-display text-2xl font-bold text-gold">{conversationTitle(conversation)}</h2>
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-3 border-ink bg-lake font-display text-base font-extrabold" aria-hidden="true">
+          {conversationTitle(conversation).charAt(0).toUpperCase()}
+        </span>
+        <h2 className="truncate font-display text-xl font-extrabold">{conversationTitle(conversation)}</h2>
       </header>
       <MessageList
         messages={state.messages[id] ?? []}

@@ -84,7 +84,7 @@ export default function RegisterPage() {
           )}
           <Field label="6-digit code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(e) => setCode(e.target.value)} error={fieldError("code")} />
           {generalError ? <FormError>{generalError}</FormError> : null}
-          {notice ? <p role="status" className="text-center text-sm font-semibold text-gold">{notice}</p> : null}
+          {notice ? <p role="status" className="text-center text-sm font-semibold text-sky-ink">{notice}</p> : null}
           <Button type="submit" busy={busy}>
             Verify
           </Button>
@@ -115,7 +115,7 @@ export default function RegisterPage() {
       </form>
       <p className="mt-4 text-center text-sm">
         Already registered?{" "}
-        <Link href="/login" className="font-semibold text-gold underline">
+        <Link href="/login" className="font-bold text-ink underline decoration-float decoration-3 underline-offset-2">
           Sign in
         </Link>
       </p>

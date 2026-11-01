@@ -91,7 +91,7 @@ export function MessageList({ messages, meId, nameOf, showSenders, hasMoreOlder,
           const mine = message.senderId === meId;
           return (
             <Fragment key={message.id}>
-              {newDay ? <p className="my-3 text-center text-xs font-bold uppercase tracking-wide text-water-light">{day}</p> : null}
+              {newDay ? <p className="my-3 text-center"><span className="rounded-full bg-ink px-3 py-1 text-xs font-bold text-paper">{day}</span></p> : null}
               <div className={newRun ? "mt-2" : "mt-0.5"}>
                 <MessageBubble
                   message={message}
@@ -108,7 +108,7 @@ export function MessageList({ messages, meId, nameOf, showSenders, hasMoreOlder,
       </div>
       {unseen ? (
         <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
-          <Button onClick={scrollToEnd} className="pointer-events-auto !py-1 !text-base shadow-lg">
+          <Button onClick={scrollToEnd} className="pointer-events-auto !py-1 !text-sm">
             New messages ↓
           </Button>
         </div>

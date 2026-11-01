@@ -24,8 +24,8 @@ export function Composer({ onSend, connected }: { onSend: (body: string) => void
   }
 
   return (
-    <div className="border-t-4 border-sand bg-water-deep p-3">
-      {connected ? null : <p role="status" className="mb-2 text-center text-sm font-semibold text-gold">Reconnecting…</p>}
+    <div className="border-t-3 border-ink bg-paper p-3">
+      {connected ? null : <p role="status" className="mb-2 text-center text-sm font-semibold text-float">Reconnecting…</p>}
       <div className="flex items-end gap-2">
         <textarea
           aria-label="Message"
@@ -35,14 +35,14 @@ export function Composer({ onSend, connected }: { onSend: (body: string) => void
           placeholder={connected ? "Write a message" : "Waiting for the connection"}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKeyDown}
-          className="max-h-40 min-h-11 flex-1 resize-none rounded-2xl border-2 border-sand bg-cream px-3 py-2 text-ink [field-sizing:content] placeholder:text-ink/50 focus-visible:outline-2 focus-visible:outline-gold disabled:opacity-60"
+          className="max-h-40 min-h-11 flex-1 resize-none rounded-xl border-3 border-ink bg-paper px-3 py-2 text-ink [field-sizing:content] placeholder:text-ink/50 focus-visible:outline-3 focus-visible:outline-offset-1 focus-visible:outline-lake disabled:opacity-60"
         />
         <Button onClick={send} disabled={!canSend}>
           Send
         </Button>
       </div>
       {length >= 3500 ? (
-        <p className={`mt-1 text-right text-xs ${length > MAX ? "font-bold text-gold" : "text-sand"}`}>
+        <p className={`mt-1 text-right text-xs ${length > MAX ? "font-bold text-float" : "text-ink/60"}`}>
           {length} / {MAX}
         </p>
       ) : null}

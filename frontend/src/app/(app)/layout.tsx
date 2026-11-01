@@ -13,7 +13,7 @@ function Splash({ text }: { text: string }) {
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-3">
       <WaveBackground />
-      <span className="font-display text-2xl text-gold">{text}</span>
+      <span className="font-display text-2xl font-extrabold">{text}</span>
       <Bobber count={1} />
     </main>
   );
@@ -26,14 +26,14 @@ function Shell({ children }: { children: ReactNode }) {
   const inChat = usePathname().startsWith("/c/");
 
   return (
-    <div className="flex h-dvh min-h-0 flex-1">
-      <aside className={`${inChat ? "hidden md:flex" : "flex"} w-full flex-col border-r-4 border-sand bg-water-deep/95 md:w-80 lg:w-96`}>
-        <header className="flex items-center justify-between gap-2 border-b-4 border-sand px-4 py-3">
+    <div className="flex h-dvh min-h-0">
+      <aside className={`${inChat ? "hidden md:flex" : "flex"} w-full flex-col bg-butter md:w-80 md:border-r-3 md:border-ink lg:w-96`}>
+        <header className="flex items-center justify-between gap-2 border-b-3 border-ink bg-sun px-4 py-3">
           <div className="min-w-0">
-            <h1 className="font-display text-2xl font-bold text-gold">Chats</h1>
-            <p className="truncate text-xs text-sand">{user?.displayName}</p>
+            <h1 className="font-display text-2xl font-extrabold">Chats</h1>
+            <p className="truncate text-xs font-semibold text-ink/70">{user?.displayName}</p>
           </div>
-          <Button variant="ghost" onClick={() => void logout()} className="!px-3 !py-1 !text-base">
+          <Button variant="ghost" onClick={() => void logout()} className="!px-3 !py-1 !text-sm">
             Sign out
           </Button>
         </header>
@@ -44,7 +44,7 @@ function Shell({ children }: { children: ReactNode }) {
           onLoadMore={() => void loadMoreConversations()}
         />
       </aside>
-      <main className={`${inChat ? "flex" : "hidden md:flex"} min-w-0 flex-1 flex-col bg-water-mid/30`}>
+      <main className={`${inChat ? "flex" : "hidden md:flex"} min-w-0 flex-1 flex-col`}>
         <Suspense fallback={null}>{children}</Suspense>
       </main>
     </div>
