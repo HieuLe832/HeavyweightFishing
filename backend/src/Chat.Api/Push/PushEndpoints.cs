@@ -22,8 +22,9 @@ public static class PushEndpoints
 
             var userId = me.UserId();
             var token = request.Token!;
-            // One physical device must not notify twice after a re-login, so the token leaves the user's other sessions.
-            await db.Sessions.Where(s => s.UserId == userId && s.PushToken == token && s.Id != me.SessionId())
+            // A token is one physical device, so it leaves every other session: the same person's (no double notifications after a
+            // re-login) and anyone else's (a shared device must not show the previous person's messages).
+            await db.Sessions.Where(s => s.PushToken == token && s.Id != me.SessionId())
                 .ExecuteUpdateAsync(u => u.SetProperty(s => s.PushToken, (string?)null).SetProperty(s => s.PushPlatform, (PushPlatform?)null), ct);
             await db.Sessions.Where(s => s.Id == me.SessionId() && s.UserId == userId)
                 .ExecuteUpdateAsync(u => u.SetProperty(s => s.PushToken, token).SetProperty(s => s.PushPlatform, (PushPlatform?)platform), ct);

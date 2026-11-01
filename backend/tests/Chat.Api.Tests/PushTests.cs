@@ -246,4 +246,19 @@ public class PushTests(ApiFixture api) : IClassFixture<ApiFixture>
         var holders = await api.WithDbAsync(db => db.Sessions.CountAsync(s => s.UserId == who.Id && s.PushToken == token));
         Assert.Equal(1, holders);
     }
+
+    /// <summary>A shared device: the first person's session is still live (say, their logout never reached the server).</summary>
+    [Fact]
+    public async Task A_token_registered_by_someone_else_on_the_same_device_leaves_the_first_persons_session()
+    {
+        var first = await api.CreatePersonAsync();
+        var second = await api.CreatePersonAsync();
+        var token = NewToken();
+        await RegisterAsync(first, token);
+
+        await RegisterAsync(second, token);
+
+        var holders = await api.WithDbAsync(db => db.Sessions.Where(s => s.PushToken == token).Select(s => s.UserId).ToListAsync());
+        Assert.Equal([second.Id], holders);
+    }
 }

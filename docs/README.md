@@ -335,8 +335,9 @@ above) and notifies each of their devices.
 | `PUT /auth/sessions/current/push-token` `{ platform, token }` | Stores the push token of the calling session. `platform` is `fcm`, `apns` or `web`; the token is 1-4096 characters without spaces (else `validation_failed`) |
 | `DELETE /auth/sessions/current/push-token` | Clears it |
 
-- A token already held by another session of the same user moves to the calling session, so one device does not notify twice
-  after a re-login. Logout revokes the session and ends its pushes.
+- A token already held by another session moves to the calling session, whoever that session belongs to: one device does not
+  notify twice after a re-login, and a shared device stops showing the previous person's messages even if their logout never
+  reached the server. Logout revokes the session and ends its pushes.
 - **Who is notified:** offline members of the conversation (checked again when the event is handled, because it may have waited
   in the queue): still an active member, not muted (`muted_until` empty or past), account `active`, and not online now. Never
   the sender, never system notices, never a message deleted in the meantime. One notification per non-revoked, unexpired session
