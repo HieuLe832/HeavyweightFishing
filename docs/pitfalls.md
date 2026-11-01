@@ -140,15 +140,14 @@ Things that look fine and break later. Many are pinned by tests in
 - **Authorise on every download.** Access follows membership and message deletion, so do not hand out long-lived presigned URLs.
   A forbidden file and a missing file must give the same `media_not_found`.
 - **`invalid_attachment` hides who owns what.** A missing file and someone else's file give the same error.
-- **Deleting a message does not delete the bytes.** Rows and objects stay (reports may need them); a cleanup job is future work.
+- **Deleting a message does not delete the bytes at once.** Rows and objects stay until `MediaCleanupService` removes files nothing uses
+  after `Media:Cleanup:GraceDays`. A file on a reported message is never removed: the report's evidence lists it.
 - **`Chat.Api.Media` would clash with the `Media` entity,** so the code is in `Chat.Api.Files`.
 - **S3-compatible stores and checksums.** `S3ObjectStore` turns off the SDK's default checksum trailers (`WHEN_REQUIRED`) because
   RustFS-style servers do not all support them.
 - **RustFS needs a writable `/data` it owns.** A `tmpfs` mount owned by root makes it exit with "Permission denied"; use a volume.
 
 ## Tooling
-
-
 
 - **Edit `.drawio` files, never the PNGs.** Regenerate the PNG after every diagram change (see
   CLAUDE.md).

@@ -230,8 +230,8 @@ Rules:
 - **Rejoining** gives a fresh member row state: role `member`, no mute, and read cursors at the current
   `last_seq`, so nothing from before shows as unread.
 - A group holds at most 256 members.
-- `unread` is `last_seq - last_read_seq`. Only sending moves it so far (your own cursor jumps to your new message);
-  reading and delivery cursors for other members arrive with 4.5, so for them it counts every message.
+- `unread` is `last_seq - last_read_seq`. Sending moves your own cursor to your new message, and `MarkRead` (4.5) moves it
+  when you read (see "API: receipts, typing and presence").
 - Group changes write system notices (`type = system`, no sender) in the same transaction; see "API: messaging".
 
 ## API: messaging
