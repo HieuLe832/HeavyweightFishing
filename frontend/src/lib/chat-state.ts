@@ -49,8 +49,12 @@ export const latestSeq = (state: ChatState, conversationId: string): number =>
 
 export const needsConversationRefetch = (state: ChatState, message: Message): boolean => !(message.conversationId in state.conversations);
 
+/** Times are compared as times: the API's ISO text varies in length (trailing zeros are trimmed), so text order is not time order. */
+const time = (iso: string) => Date.parse(iso);
+
+/** Newest activity first; equal times by id, as the API orders them, so the list and its paging agree. */
 const byActivity = (conversations: Record<string, ConversationSummary>) => (a: string, b: string) =>
-  conversations[b].updatedAt.localeCompare(conversations[a].updatedAt);
+  time(conversations[b].updatedAt) - time(conversations[a].updatedAt) || (a < b ? -1 : a > b ? 1 : 0);
 
 /** Puts confirmed messages in seq order and keeps the unconfirmed ones after them. */
 function arrange(list: ChatMessage[]): ChatMessage[] {
@@ -74,7 +78,7 @@ function withConversationActivity(state: ChatState, message: Message, moveToTop:
   const updated: ConversationSummary = {
     ...conversation,
     lastSeq: Math.max(conversation.lastSeq, message.seq),
-    updatedAt: message.createdAt > conversation.updatedAt ? message.createdAt : conversation.updatedAt,
+    updatedAt: time(message.createdAt) > time(conversation.updatedAt) ? message.createdAt : conversation.updatedAt,
   };
   return {
     ...state,

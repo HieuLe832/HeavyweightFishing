@@ -24,6 +24,26 @@ describe("conversations", () => {
     expect(withConvs().listLoaded).toBe(true);
   });
 
+  it("are ordered by time, not by text, with the server's id order for equal times", () => {
+    // The API trims trailing zeros, so a whole second has no fraction; text comparison puts "00+00:00" and "00.5+00:00" either way.
+    const state = withConvs(
+      conv("c", { updatedAt: "2026-01-01T00:00:00+00:00" }),
+      conv("b", { updatedAt: "2026-01-01T00:00:00.5+00:00" }),
+      conv("a", { updatedAt: "2026-01-01T00:00:00+00:00" }),
+    );
+
+    expect(state.order).toEqual(["b", "a", "c"]);
+  });
+
+  it("keep their last activity when an older message arrives, whatever the text format", () => {
+    const state = run(
+      withConvs(conv("b", { updatedAt: "2026-01-01T00:00:00.5+00:00" })),
+      { type: "messageCreated", message: msg("b", 1, { createdAt: "2026-01-01T00:00:00Z" }), meId: ME },
+    );
+
+    expect(state.conversations.b.updatedAt).toBe("2026-01-01T00:00:00.5+00:00");
+  });
+
   it("are ordered by latest activity", () => {
     const state = withConvs(conv("a", { updatedAt: "2026-01-01T00:00:00Z" }), conv("b", { updatedAt: "2026-01-02T00:00:00Z" }));
 
