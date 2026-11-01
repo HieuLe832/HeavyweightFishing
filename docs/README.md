@@ -57,7 +57,7 @@ The ERD uses **crow's-foot** notation. Each table's header colour matches the DF
 | 2.0 Manage Profile & Contacts | Profile edits, user search, contact list, blocking |
 | 3.0 Manage Conversations | Direct chats and groups, members and roles, rename, leave |
 | 4.0 Exchange Messages | Send, edit and react; real-time delivery; receipts, typing, presence; history; push |
-| 5.0 Manage Media | Upload, validate and serve files for attachments and avatars |
+| 5.0 Manage Media | Upload, validate and serve files for attachments and avatars. Decides who may read a file (uploader, members, blocks, live messages), sets user and group avatars, and removes files nothing uses, keeping those a report lists |
 | 6.0 Moderate & Audit | Abuse reports, bans (which revoke sessions), audit log |
 
 | Store | Holds | Tables (see ERD) |
@@ -100,10 +100,10 @@ Banning a user in 6.0 revokes their sessions in D2, so both 1.5 and 1.7 reject t
 | Sub-process | Does |
 |-------------|------|
 | 4.1 Validate Command | Checks membership and role, blocks (direct chats), attachment ownership and readiness, and rate limits; routes the command to 4.2, 4.5 or 4.6 |
-| 4.2 Store Message | Assigns the next per-conversation `seq`, drops duplicates by `client_msg_id`, applies edits, deletes and reactions (sender-only edits), stores system notices from 3.0 |
-| 4.3 Fan Out Events | Sends each event to every connected device of every member, which includes the sender's own ack; passes offline members on to 4.4 |
-| 4.4 Send Push Notifications | Skips muted members and sends a short preview to each device's push token |
-| 4.5 Track Receipts, Typing & Presence | Moves each member's read / delivered cursor, keeps online and typing state in Redis, and emits those events through 4.3 |
+| 4.2 Store Message | Assigns the next per-conversation `seq` (bumping `last_seq` in D5 and moving the sender's own read cursor), drops duplicates by `client_msg_id`, applies edits, deletes and reactions (sender-only edits), stores system notices from 3.0 |
+| 4.3 Fan Out Events | Sends each event to every connected device of every active member (account status from D1), which includes the sender's own ack; passes offline members on to 4.4 with the sender's name |
+| 4.4 Send Push Notifications | Skips muted members and sends a short preview to each device's push token; clears a token the provider rejects |
+| 4.5 Track Receipts, Typing & Presence | Moves each member's read / delivered cursor, keeps online and typing state in Redis, and emits those events through 4.3. Presence goes only to people who share a conversation (D5), minus blocks either way (D4) |
 | 4.6 Serve History & Sync | Returns message pages before or after a `seq`, so a reconnecting client fills exactly the gap it missed |
 
 ### 3c. Process 6.0 Moderate & Audit
@@ -112,8 +112,8 @@ Banning a user in 6.0 revokes their sessions in D2, so both 1.5 and 1.7 reject t
 
 | Sub-process | Does |
 |-------------|------|
-| 6.1 Submit Report | Any signed-in user reports a user or message. Checks the reporter is a member of that message's conversation, then stores the report with a snapshot of the message as evidence |
-| 6.2 Review Reports | Lists reports (a queue) and shows one with its evidence and the users involved. The list leaves evidence out; every view of evidence is sent to 6.3, because admins are reading private messages |
+| 6.1 Submit Report | Any signed-in user reports a user or message. For a message, checks the reporter is a member of its conversation; for a user, checks the target is visible to them (D1) and not behind a block (D4). Then stores the report with a snapshot of the message as evidence |
+| 6.2 Review Reports | Lists reports (a queue) and shows one with its evidence and the users involved, and serves the files the evidence lists (D7). The list leaves evidence out; every view of evidence or of one of its files is sent to 6.3, because admins are reading private messages |
 | 6.3 Record Audit Entry | The only writer of the audit log. It records who did what to which target; entries are never updated or deleted |
 | 6.4 Apply Moderation Decision | Bans or unbans a user and actions or dismisses a report. A ban sets the account status and revokes every session, so the user is signed out everywhere at once |
 | 6.5 Query Audit Log | Lets admins search the audit log by actor, action and date |
