@@ -91,23 +91,34 @@ export function ChatProvider({ children, createConnection = createChatConnection
     const connection = createConnection({ hubUrl: `${config.apiUrl}/hubs/chat`, getAccessToken: () => api.accessToken() });
     connectionRef.current = connection;
     let stopped = false;
+    let starting = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let attempt = 0;
 
+    // The only place a restart is scheduled, so there is never more than one pending and `timer` says whether one is.
+    const scheduleRestart = (delay: number, refreshFirst: boolean) => {
+      if (stopped) return;
+      clearTimeout(timer);
+      timer = setTimeout(async () => {
+        timer = undefined;
+        // The access token may have expired while the socket was down; a refused refresh signs the person out.
+        if (refreshFirst) await api.refresh().catch(() => {});
+        if (!stopped) void connect();
+      }, delay);
+    };
+
     const connect = async () => {
+      starting = true;
       try {
         await connection.start();
         attempt = 0;
-        await resync();
       } catch {
-        if (stopped) return;
-        const delay = RESTART_DELAYS[Math.min(attempt++, RESTART_DELAYS.length - 1)];
-        timer = setTimeout(async () => {
-          // The access token may have expired while the socket was down; a refused refresh signs the person out.
-          await api.refresh().catch(() => {});
-          if (!stopped) void connect();
-        }, delay);
+        scheduleRestart(RESTART_DELAYS[Math.min(attempt++, RESTART_DELAYS.length - 1)], true);
+        return;
+      } finally {
+        starting = false;
       }
+      await resync().catch(() => {});
     };
 
     const unsubscribe = connection.subscribe({
@@ -120,12 +131,8 @@ export function ChatProvider({ children, createConnection = createChatConnection
       onReconnected: () => void resync().catch(() => {}),
       onStatus: (status) => {
         dispatch({ type: "status", status });
-        if (status === "disconnected" && !stopped && timer === undefined) {
-          timer = setTimeout(() => {
-            timer = undefined;
-            void connect();
-          }, RESTART_DELAYS[0]);
-        }
+        // A failed start also reports "disconnected"; connect() schedules that retry itself.
+        if (status === "disconnected" && !starting && timer === undefined) scheduleRestart(RESTART_DELAYS[0], false);
       },
     });
     void connect();

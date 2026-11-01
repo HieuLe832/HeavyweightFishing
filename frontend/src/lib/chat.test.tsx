@@ -222,6 +222,44 @@ describe("ChatProvider", () => {
     expect(connection.start).toHaveBeenCalledTimes(2);
   });
 
+  it("after a failed start it retries once, and still restarts when the connection later drops", async () => {
+    const { connection } = setup(standardRoute());
+    await flush();
+    connection.start.mockClear();
+    // Like the real connection: a failed start reports "disconnected" before it rejects.
+    connection.start.mockImplementationOnce(async () => {
+      connection.emit("onStatus", "disconnected");
+      throw new Error("server down");
+    });
+    act(() => connection.emit("onStatus", "disconnected"));
+    await act(async () => { await vi.advanceTimersByTimeAsync(1100); }); // the restart, which fails
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000); }); // one retry, which works
+
+    expect(connection.start).toHaveBeenCalledTimes(2);
+
+    act(() => connection.emit("onStatus", "disconnected"));
+    await act(async () => { await vi.advanceTimersByTimeAsync(1500); });
+
+    expect(connection.start).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not start the connection again after it unmounts with a restart pending", async () => {
+    const { connection, unmount } = setup(standardRoute());
+    await flush();
+    connection.start.mockImplementation(async () => {
+      connection.emit("onStatus", "disconnected");
+      throw new Error("server down");
+    });
+    act(() => connection.emit("onStatus", "disconnected"));
+    await act(async () => { await vi.advanceTimersByTimeAsync(1100); });
+    const before = connection.start.mock.calls.length;
+
+    unmount();
+    await act(async () => { await vi.advanceTimersByTimeAsync(30000); });
+
+    expect(connection.start).toHaveBeenCalledTimes(before);
+  });
+
   it("stops asking for newer messages when the server claims more but sends nothing newer", async () => {
     const { latest, request } = setup((method, path) => {
       if (path.includes("/messages?after=")) return { messages: [msg("a", 2)], hasMore: true };

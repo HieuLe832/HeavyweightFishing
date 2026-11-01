@@ -155,6 +155,41 @@ describe("token refresh", () => {
     expect(calls).toHaveLength(3);
   });
 
+  it("serialises refreshes across tabs that share the refresh token, so the second uses the rotated token", async () => {
+    // Two tabs: one refresh token (localStorage), separate access tokens, one cross-tab lock. The server rotates the token and
+    // treats a used one as theft, so an overlap would end the session.
+    let stored: string | null = "refresh-1";
+    const tab = () => {
+      let access: string | null = "access-1";
+      return { getAccess: () => access, setAccess: (t: string | null) => (access = t), getRefresh: () => stored, setRefresh: (t: string | null) => (stored = t) };
+    };
+    let tail: Promise<unknown> = Promise.resolve();
+    const lock = <T,>(_name: string, fn: () => Promise<T>): Promise<T> => {
+      const run = tail.then(fn);
+      tail = run.catch(() => {});
+      return run;
+    };
+    let current = 1;
+    const seen: string[] = [];
+    const fetchFn = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const { refreshToken } = JSON.parse(init!.body as string);
+      seen.push(refreshToken);
+      await new Promise((r) => setTimeout(r, 5));
+      if (refreshToken !== `refresh-${current}`) return json(401, { code: "invalid_refresh_token" });
+      current++;
+      return json(200, auth(current));
+    }) as typeof fetch;
+    const onSessionEnded = vi.fn();
+    const a = createApi({ baseUrl: "http://api.test", tokens: tab(), fetch: fetchFn, onSessionEnded, lock });
+    const b = createApi({ baseUrl: "http://api.test", tokens: tab(), fetch: fetchFn, onSessionEnded, lock });
+
+    await Promise.all([a.refresh(), b.refresh()]);
+
+    expect(seen).toEqual(["refresh-1", "refresh-2"]);
+    expect(stored).toBe("refresh-3");
+    expect(onSessionEnded).not.toHaveBeenCalled();
+  });
+
   it("never refreshes for the auth endpoints themselves", async () => {
     const { api, calls } = setup(() => json(401, { code: "invalid_credentials" }));
 

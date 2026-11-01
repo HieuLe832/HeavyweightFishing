@@ -38,7 +38,9 @@ Things that look fine and break later. Many are pinned by tests in
 - **Refresh-token reuse revokes the session.** A token with `used_at` set that is presented again means
   theft; revoke the whole session, not just that token. `SignInService.RefreshAsync` does this.
 - **Refresh calls from one client must not overlap.** Two parallel refreshes with the same token look like
-  reuse: one wins, the other fails and the session is revoked. Clients serialise their refresh calls.
+  reuse: one wins, the other fails and the session is revoked. Clients serialise their refresh calls, across
+  browser tabs too: tabs share the refresh token, so the web client holds a Web Lock (`chat-auth-refresh`) and
+  reads the token inside it.
 - **Every authenticated request reads `sessions`.** `JwtBearerSetup` checks the session after validating
   the JWT; that lookup is what makes logout, password reset and bans immediate. Do not cache it without
   a short TTL, and do not skip it for "cheap" endpoints.

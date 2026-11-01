@@ -64,6 +64,8 @@ export interface ApiOptions {
   fetch?: typeof fetch;
   /** Called when the session cannot be continued (the refresh token was refused). */
   onSessionEnded: () => void;
+  /** Runs `fn` while holding a lock shared by every tab. Defaults to the Web Locks API, when the browser has it. */
+  lock?: <T>(name: string, fn: () => Promise<T>) => Promise<T>;
 }
 
 export interface Api {
@@ -79,10 +81,21 @@ export interface Api {
   accessToken(): string | null;
 }
 
+/**
+ * Tabs share the refresh token (localStorage) and the server revokes the session when a used one comes back, so two tabs must
+ * never refresh at the same time. Without the Web Locks API (old browsers, tests) refreshes are serialised per tab only.
+ */
+function browserLock<T>(name: string, fn: () => Promise<T>): Promise<T> {
+  if (typeof navigator === "undefined" || !navigator.locks) return fn();
+  return navigator.locks.request(name, fn) as Promise<T>;
+}
+
+const REFRESH_LOCK = "chat-auth-refresh";
+
 /** Calls that must never trigger a token refresh: they run without a session, or are the refresh itself. */
 const NO_REFRESH = ["/auth/refresh", "/auth/login", "/auth/register", "/auth/verify-email", "/auth/resend-verification"];
 
-export function createApi({ baseUrl, tokens, fetch: fetchFn = (...args) => fetch(...args), onSessionEnded }: ApiOptions): Api {
+export function createApi({ baseUrl, tokens, fetch: fetchFn = (...args) => fetch(...args), onSessionEnded, lock = browserLock }: ApiOptions): Api {
   let refreshing: Promise<void> | null = null;
 
   async function send<T>(method: string, path: string, body: unknown): Promise<{ status: number; value: T | undefined }> {
@@ -115,9 +128,12 @@ export function createApi({ baseUrl, tokens, fetch: fetchFn = (...args) => fetch
     onSessionEnded();
   }
 
-  /** One refresh at a time: refresh tokens are single-use, so concurrent calls must share the answer. */
+  /**
+   * One refresh at a time: refresh tokens are single-use, so concurrent calls in this tab share the answer, and other tabs wait
+   * for the lock. The token is read inside the lock, so a tab that waited uses the one the other tab just received.
+   */
   function refresh(): Promise<void> {
-    refreshing ??= (async () => {
+    refreshing ??= lock(REFRESH_LOCK, async () => {
       const refreshToken = tokens.getRefresh();
       if (!refreshToken) {
         endSession();
@@ -132,7 +148,7 @@ export function createApi({ baseUrl, tokens, fetch: fetchFn = (...args) => fetch
         if (e instanceof ApiError && e.status === 401) endSession();
         throw e;
       }
-    })().finally(() => {
+    }).finally(() => {
       refreshing = null;
     });
     return refreshing;
