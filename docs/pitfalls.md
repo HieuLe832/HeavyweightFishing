@@ -90,7 +90,9 @@ Things that look fine and break later. Many are pinned by tests in
 ## Real-time and presence
 
 - **Presence leases, not flags.** A connection is online only while its lease is live; `PresenceRefresher` renews this node's
-  leases. Never store "online = true" without an expiry: a node that dies would leave its users online forever.
+  leases. Never store "online = true" without an expiry: a node that dies would leave its users online forever. A renewal
+  writes the leases it listed at its start, so `PresenceService` makes a disconnect wait for the renewal in flight; do not
+  "fix" that race with `ZADD XX`, which would stop renewals from refilling a Redis that lost its data.
 - **A crash sends no `presence.changed`.** Events are hints; clients reconcile with `GET /conversations/{id}/presence`.
 - **Presence audience excludes blocks both ways.** `PresenceAudience` is the only place that decides who sees presence; sending
   it to the whole conversation would show a blocker's comings and goings to the person they blocked.
