@@ -167,6 +167,9 @@ The endpoints that work without a session (register, verify, resend, both reset 
 many accounts or codes one address can try; it does not stop a targeted lockout of one account (5 wrong passwords), which stays
 a known limit. Refresh is not limited (the token is a 256-bit secret).
 
+Behind a reverse proxy, set `ForwardedHeaders:KnownProxies` (addresses) or `ForwardedHeaders:KnownNetworks` (CIDR), so sessions,
+the audit log and this limit see the client's address rather than the proxy's. With neither set, `X-Forwarded-For` is ignored.
+
 Emails are queued in memory and sent in the background, so a request never waits on the mail server, and the silent
 endpoints (resend, reset request) do not answer slower for an address that exists. A restart drops unsent emails; the user
 asks for a new code. For a real mail server set `Smtp:Security` (`StartTls` or `SslOnConnect`; the default `Auto` falls back

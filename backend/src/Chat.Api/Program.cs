@@ -11,6 +11,7 @@ using Chat.Api.Users;
 using Chat.Data;
 using Chat.Data.Entities;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
@@ -33,6 +34,9 @@ builder.Services.AddOptions<RealtimeOptions>().BindConfiguration(RealtimeOptions
 // cookies, so credentials stay off.
 var allowedOrigins = builder.Configuration.GetSection(CorsOptions.Section).Get<CorsOptions>()?.AllowedOrigins ?? [];
 builder.Services.AddCors(o => o.AddPolicy(CorsOptions.PolicyName, p => p.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod()));
+
+var proxies = builder.Configuration.GetSection(ProxyOptions.Section).Get<ProxyOptions>() ?? new ProxyOptions();
+if (!proxies.IsEmpty) builder.Services.Configure<ForwardedHeadersOptions>(proxies.ApplyTo);
 
 // Redis (the SignalR backplane and D9) and RabbitMQ (durable events) are optional: without them the API runs one node
 // with in-memory presence and an in-process bus, which is what tests and a bare dev setup use.
@@ -140,6 +144,8 @@ if (app.Environment.IsDevelopment())
     await scope.ServiceProvider.GetRequiredService<ChatDbContext>().Database.MigrateAsync();
 }
 
+// First, so everything after it (sessions, the audit log, the auth rate limit) sees the client's address, not the proxy's.
+if (!proxies.IsEmpty) app.UseForwardedHeaders();
 app.UseCors(CorsOptions.PolicyName);
 app.UseAuthentication();
 app.UseAuthorization();
