@@ -140,7 +140,7 @@ public class ChatHub(
 
         if (typing) await presence.SetTypingAsync(conversationId, userId, ct);
         else await presence.ClearTypingAsync(conversationId, userId, ct);
-        await broadcaster.PublishToOthersAsync("typing", new { ConversationId = conversationId, UserId = userId, Typing = typing }, conversationId, userId, ct);
+        await broadcaster.PublishPresenceSignalAsync("typing", new { ConversationId = conversationId, UserId = userId, Typing = typing }, conversationId, userId, ct);
     }
 
     private static void Fail(AuthError? error)

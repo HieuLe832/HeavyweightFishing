@@ -11,7 +11,7 @@ namespace Chat.Api.Messaging;
 /// Recipients are looked up per event, so someone who left stops receiving at once and there are no connection groups to keep in sync.
 /// </summary>
 public class MessageBroadcaster(
-    ChatDbContext db, IHubContext<ChatHub> hub, PresenceService presence, IEventBus bus, ILogger<MessageBroadcaster> log)
+    ChatDbContext db, IHubContext<ChatHub> hub, PresenceService presence, PresenceAudience audience, IEventBus bus, ILogger<MessageBroadcaster> log)
 {
     /// <summary>Call after the transaction commits. A delivery failure is logged, not thrown: the change already happened.</summary>
     public async Task PublishAsync(string eventName, object payload, Guid conversationId, IEnumerable<Guid>? extraRecipients, CancellationToken ct)
@@ -27,13 +27,16 @@ public class MessageBroadcaster(
         }
     }
 
-    /// <summary>Like <see cref="PublishAsync"/> but not to <paramref name="exceptUserId"/> (typing goes to the others).</summary>
-    public async Task PublishToOthersAsync(string eventName, object payload, Guid conversationId, Guid exceptUserId, CancellationToken ct)
+    /// <summary>
+    /// A signal about <paramref name="userId"/> (typing) to the other members who may see that user's presence: like
+    /// <c>presence.changed</c>, nobody with a block either way. Messages still reach them; only this live state is hidden.
+    /// </summary>
+    public async Task PublishPresenceSignalAsync(string eventName, object payload, Guid conversationId, Guid userId, CancellationToken ct)
     {
         try
         {
-            var members = await MembersAsync(conversationId, ct);
-            await SendAsync(eventName, payload, members.Where(id => id != exceptUserId), ct);
+            var others = (await MembersAsync(conversationId, ct)).Where(id => id != userId).ToList();
+            await SendAsync(eventName, payload, await audience.WithoutBlocksAsync(userId, others, ct), ct);
         }
         catch (Exception e)
         {

@@ -301,7 +301,7 @@ Process 4.5 and the real-time half of 4.3. Same hub (`/hubs/chat`), same error c
 | Event | Payload | Sent to |
 |-------|---------|---------|
 | `receipt.updated` | `{ conversationId, userId, lastDeliveredSeq, lastReadSeq }` | every active member, the caller's other devices too |
-| `typing` | `{ conversationId, userId, typing }` | the other active members |
+| `typing` | `{ conversationId, userId, typing }` | the other active members, minus any block either way (as for presence) |
 | `presence.changed` | `{ userId, online }` | people who share an active conversation with the user, minus any block either way |
 
 - **Receipts** only move forward and are checked in the `UPDATE`, so two devices racing cannot move a cursor back. A repeated

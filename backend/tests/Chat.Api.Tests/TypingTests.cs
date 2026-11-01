@@ -29,6 +29,32 @@ public class TypingTests(ApiFixture api) : IClassFixture<ApiFixture>
         await aliceInbox.ExpectNone("typing");
     }
 
+    /// <summary>Like presence: a block either way hides the typing signal, in a group too (only direct chats refuse the command).</summary>
+    [Fact]
+    public async Task In_a_group_typing_skips_anyone_with_a_block_either_way()
+    {
+        var alice = await api.CreatePersonAsync();
+        var blocker = await api.CreatePersonAsync();
+        var blocked = await api.CreatePersonAsync();
+        var carol = await api.CreatePersonAsync();
+        var group = await api.CreateGroupAsync(alice, blocker, blocked, carol);
+        (await api.Client.PutAsync(blocker, $"/blocks/{alice.Id}")).EnsureSuccessStatusCode();
+        (await api.Client.PutAsync(alice, $"/blocks/{blocked.Id}")).EnsureSuccessStatusCode();
+        await using var aliceHub = await api.ConnectAsync(alice);
+        await using var blockerHub = await api.ConnectAsync(blocker);
+        await using var blockedHub = await api.ConnectAsync(blocked);
+        await using var carolHub = await api.ConnectAsync(carol);
+        var blockerInbox = Inbox.Listen(blockerHub);
+        var blockedInbox = Inbox.Listen(blockedHub);
+        var carolInbox = Inbox.Listen(carolHub);
+
+        await aliceHub.InvokeAsync("SetTyping", group, true);
+
+        Assert.Equal(alice.Id, (await carolInbox.Next("typing")).GetProperty("userId").GetGuid());
+        await blockerInbox.ExpectNone("typing");
+        await blockedInbox.ExpectNone("typing");
+    }
+
     [Fact]
     public async Task Stopping_clears_the_state_and_tells_the_others()
     {
