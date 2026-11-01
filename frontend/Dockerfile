@@ -3,7 +3,11 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
-RUN npm run build
+# NEXT_PUBLIC_* values are compiled into the browser bundle, so the API address is a build argument, not a runtime setting.
+ARG NEXT_PUBLIC_API_URL=http://localhost:5036
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+# public/ is empty and git keeps no empty folders, but the runtime stage copies it.
+RUN mkdir -p public && npm run build
 
 FROM node:22-alpine
 WORKDIR /app

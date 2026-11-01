@@ -11,6 +11,9 @@ npm run lint
 npm run build
 ```
 
+The Docker image bakes the API address in at build time (`NEXT_PUBLIC_*` values end up in the browser bundle):
+`docker build --build-arg NEXT_PUBLIC_API_URL=https://api.example.com -t chat-web frontend`.
+
 The API must allow this origin: `Cors:AllowedOrigins` is `http://localhost:3000` in Development (see "API: messaging" in
 `docs/README.md`). Dev email (the verification code) is in Mailpit at http://localhost:8025.
 
