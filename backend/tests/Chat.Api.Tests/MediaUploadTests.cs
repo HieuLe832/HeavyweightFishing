@@ -126,7 +126,7 @@ public class MediaUploadTests(ApiFixture api) : IClassFixture<ApiFixture>
     public void The_request_size_limit_is_the_file_limit_plus_room_for_the_multipart_framing()
     {
         var endpoint = api.Services.GetRequiredService<EndpointDataSource>().Endpoints.OfType<RouteEndpoint>()
-            .Single(e => e.RoutePattern.RawText == "/media" && e.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods.Contains("POST"));
+            .Single(e => e.RoutePattern.RawText?.TrimStart('/') == "media" && e.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods.Contains("POST"));
         var max = api.Services.GetRequiredService<IOptions<MediaOptions>>().Value.MaxBytes;
 
         var limit = endpoint.Metadata.GetMetadata<IRequestSizeLimitMetadata>()!.MaxRequestBodySize;

@@ -135,7 +135,7 @@ Things that look fine and break later. Many are pinned by tests in
 - **Never trust the client's content type or file name.** `MediaSniffer` decides from the bytes. SVG and HTML are not types: markup
   is stored as `text/plain` and served with `nosniff` as a download. Do not add a type that browsers render without also thinking
   about script.
-- **A header is not a decode.** Dimensions come from the header and may lie. Serve with the locked-down headers in `MediaEndpoints`
+- **A header is not a decode.** Dimensions come from the header and may lie. Serve with the locked-down headers in `MediaResponse`
   and never inline anything but images; if you ever resize or re-encode, do it in a sandbox.
 - **Authorise on every download.** Access follows membership and message deletion, so do not hand out long-lived presigned URLs.
   A forbidden file and a missing file must give the same `media_not_found`.

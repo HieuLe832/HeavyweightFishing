@@ -134,6 +134,10 @@ builder.Services.AddScoped<CommandValidator>();
 builder.Services.AddScoped<MessageWriter>();
 builder.Services.AddScoped<MessageReader>();
 builder.Services.AddScoped<MessageBroadcaster>();
+builder.Services.AddControllers().ConfigureApiBehaviorOptions(o =>
+    // A body or parameter that cannot be bound gets the same shape as the API's own validation errors.
+    o.InvalidModelStateResponseFactory = context => ProblemResults.Invalid(context.HttpContext, context.ModelState));
+builder.Services.ConfigureOptions<UploadLimitsSetup>();
 
 var app = builder.Build();
 PushRegistration.LogActiveSenders(app.Services.GetServices<IPushSender>(), app.Logger);
@@ -159,17 +163,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
 
-app.MapGet("/health", async (ChatDbContext db) =>
-    await db.Database.CanConnectAsync() ? Results.Ok(new { status = "ok" }) : Results.StatusCode(503));
-app.MapAuth();
-app.MapUsers();
-app.MapConversations();
-app.MapHistory();
-app.MapPresence();
-app.MapPush();
-app.MapMedia();
-app.MapAvatars();
-app.MapModeration();
+app.MapControllers();
 app.MapHub<ChatHub>("/hubs/chat");
 
 app.Run();
