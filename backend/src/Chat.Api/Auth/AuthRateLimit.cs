@@ -28,7 +28,7 @@ public static class AuthRateLimit
         {
             if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
                 context.HttpContext.Response.Headers.RetryAfter = ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString();
-            return new ValueTask(ProblemResults.Problem(AuthError.RateLimited).ExecuteAsync(context.HttpContext));
+            return new ValueTask(Results.Problem(ProblemResults.Details(context.HttpContext, AuthError.RateLimited)).ExecuteAsync(context.HttpContext));
         };
     });
 }

@@ -226,7 +226,7 @@ public class PushTests(ApiFixture api) : IClassFixture<ApiFixture>
     {
         var who = await api.CreatePersonAsync();
 
-        var tooLong = await api.Client.PutAsync(who, "/auth/sessions/current/push-token", new { platform = "fcm", token = new string('a', PushEndpoints.MaxTokenLength + 1) });
+        var tooLong = await api.Client.PutAsync(who, "/auth/sessions/current/push-token", new { platform = "fcm", token = new string('a', PushTokenController.MaxTokenLength + 1) });
         await tooLong.AssertErrorAsync(HttpStatusCode.BadRequest, "validation_failed");
 
         Assert.Equal(HttpStatusCode.Unauthorized, (await api.NewClient().PutAsync("/auth/sessions/current/push-token",
